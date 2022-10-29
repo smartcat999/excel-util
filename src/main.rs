@@ -29,17 +29,25 @@ fn main() {
             Arg::new("column")
                 .default_value("3")
                 .long("col")
-                .help("待处理的表格行号"),
+                .help("待处理的表格列序号(从0开始)"),
+        )
+        .arg(
+            Arg::new("row")
+                .default_value("2")
+                .long("row")
+                .help("待处理的表格行序号(从0开始)"),
         )
         .override_usage(
-            "etool -p ./tmp -f student.xlsx --sheet Sheet1 --col 3\n  "
+            "etool -p ./tmp -f student.xlsx --sheet Sheet1 --row 2 --col 3\n  "
         )
         .get_matches();
     let path = args.get_one::<String>("path").unwrap();
     let file = args.get_one::<String>("file").unwrap();
     let sheet = args.get_one::<String>("sheet").unwrap();
+    let row = args.get_one::<String>("row").unwrap();
     let column = args.get_one::<String>("column").unwrap();
-    print!("{}", column);
+    println!("{}行-{}列", row, column);
+    let row = row.parse::<usize>().unwrap();
     let column = column.parse::<usize>().unwrap();
 
     if !Path::exists(Path::new(path)) {
@@ -47,8 +55,11 @@ fn main() {
     };
     let mut workbook = Excel::open(file).unwrap();
     let range = workbook.worksheet_range(sheet).unwrap();
-    for i in range.rows() {
-        let value = i[column].clone();
+    for (index, vals) in range.rows().enumerate() {
+        if index < row {
+            continue;
+        }
+        let value = vals[column].clone();
         match value {
             DataType::String(v) => {
                 let sub_path = format!("{}/{}", path, v);
