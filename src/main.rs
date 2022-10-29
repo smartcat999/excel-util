@@ -37,9 +37,7 @@ fn main() {
                 .long("row")
                 .help("待处理的表格行序号(从0开始)"),
         )
-        .override_usage(
-            "etool -p ./tmp -f student.xlsx --sheet Sheet1 --row 2 --col 3\n  "
-        )
+        .override_usage("etool -p ./tmp -f student.xlsx --sheet Sheet1 --row 2 --col 3\n  ")
         .get_matches();
     let path = args.get_one::<String>("path").unwrap();
     let file = args.get_one::<String>("file").unwrap();
@@ -51,7 +49,7 @@ fn main() {
     let column = column.parse::<usize>().unwrap();
 
     if !Path::exists(Path::new(path)) {
-        fs::create_dir(path);
+        fs::create_dir(path).unwrap();
     };
     let mut workbook = Excel::open(file).unwrap();
     let range = workbook.worksheet_range(sheet).unwrap();
@@ -59,16 +57,14 @@ fn main() {
         if index < row {
             continue;
         }
+
         let value = vals[column].clone();
-        match value {
-            DataType::String(v) => {
-                let sub_path = format!("{}/{}", path, v);
-                println!("{:#?}", sub_path);
-                if !Path::exists(Path::new(&sub_path)) {
-                    fs::create_dir(sub_path).unwrap();
-                }
+        if let DataType::String(v) = value {
+            let sub_path = format!("{}/{}", path, v);
+            println!("{:#?}", sub_path);
+            if !Path::exists(Path::new(&sub_path)) {
+                fs::create_dir(sub_path).unwrap();
             }
-            _ => {}
         }
     }
 }
