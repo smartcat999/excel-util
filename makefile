@@ -1,5 +1,8 @@
 .PHONY: all build-linux build-windows build-macos clean help
 
+build-local:
+	cargo build --release
+
 build-linux:
 	cargo build --release --target=x86_64-unknown-linux-gnu 
 
