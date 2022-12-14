@@ -1,9 +1,9 @@
 extern crate clap;
 use clap::{App, Arg, Command};
-use office::{DataType, Excel, Range};
+use office::{DataType, Excel};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Component, Path};
+use std::path::{Path};
 use xlsxwriter::*;
 
 fn main() {
