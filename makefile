@@ -1,4 +1,5 @@
-.PHONY: all build-linux build-windows build-macos clean help
+.PHONY: all 
+all: build-linux build-windows build-macos
 
 build-local:
 	cargo build --release
@@ -14,8 +15,6 @@ build-macos:
 
 clean:
 	cargo clean
-
-all: help
 
 help:
 	@echo "usage: make build-linux or make build-windows or make build-macos"
