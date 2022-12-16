@@ -205,32 +205,37 @@ fn parse_object(
             .unwrap();
         sheet1.write_string(0, 2, "cves", Some(&format1)).unwrap();
 
-        for (index, (k, v)) in object_map.iter().enumerate() {
+        let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
+        object_keys.sort();
+        println!("object: {:#?}", object_keys);
+        for (index, k) in object_keys.iter().enumerate() {
             // println!("{:#?}: \n{:#?}", k, v);
-            sheet1
-                .write_string((index + 1) as u32, 0, k, Some(&format2))
-                .unwrap();
-            sheet1
-                .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
-                .unwrap();
+            if let Some(v) = object_map.get(k) {
+                sheet1
+                    .write_string((index + 1) as u32, 0, k, Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
+                    .unwrap();
 
-            // add row of cves
-            let mut cves: Vec<String> = Vec::new();
-            for comp_key in v.iter() {
-                let comp_key: Vec<&str> = comp_key.split(":  ").collect();
-                let comp_key = comp_key[0];
-                if let Some(cve) = cve_map.get(comp_key) {
-                    cves.extend_from_slice(cve);
+                // add row of cves
+                let mut cves: Vec<String> = Vec::new();
+                for comp_key in v.iter() {
+                    let comp_key: Vec<&str> = comp_key.split(":  ").collect();
+                    let comp_key = comp_key[0];
+                    if let Some(cve) = cve_map.get(comp_key) {
+                        cves.extend_from_slice(cve);
+                    }
                 }
+                sheet1
+                    .write_string(
+                        (index + 1) as u32,
+                        2,
+                        cves.join("\n").as_str(),
+                        Some(&format2),
+                    )
+                    .unwrap();
             }
-            sheet1
-                .write_string(
-                    (index + 1) as u32,
-                    2,
-                    cves.join("\n").as_str(),
-                    Some(&format2),
-                )
-                .unwrap();
         }
     }
 
@@ -338,14 +343,19 @@ fn parse_cve_detail(
             .unwrap();
         sheet1.write_string(0, 1, "cve", Some(&format1)).unwrap();
 
-        for (index, (k, v)) in component_map.iter().enumerate() {
+        let mut component_keys: Vec<String> = component_map.keys().map(|x| x.to_string()).collect();
+        component_keys.sort();
+        println!("component: {:#?}", component_keys);
+        for (index, k) in component_keys.iter().enumerate() {
             // println!("{:#?}: \n{:#?}", k, v);
-            sheet1
-                .write_string((index + 1) as u32, 0, k, Some(&format2))
-                .unwrap();
-            sheet1
-                .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
-                .unwrap();
+            if let Some(v) = component_map.get(k) {
+                sheet1
+                    .write_string((index + 1) as u32, 0, k, Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
+                    .unwrap();
+            }
         }
     }
 
