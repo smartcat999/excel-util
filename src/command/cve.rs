@@ -25,7 +25,19 @@ pub fn new_sub_command<'help>() -> App<'help> {
                 .long("sheet")
                 .help("待处理的Excel文件表格名称"),
         )
-        .override_usage("etool cve -p ./tmp -f Open_Source_Binary_Result.xlsx --sheet 组件报告\n  ")
+        .arg(
+            Arg::new("sheet_ext")
+                .default_value("漏洞报告")
+                .long("sheet_ext")
+                .help("待处理的Excel文件表格名称"),
+        )
+        .arg(
+            Arg::new("output")
+                .default_value("cve.xlsx")
+                .short('o')
+                .help("输出的Excel文件表格名称"),
+        )
+        .override_usage("etool cve -p ./tmp -f Open_Source_Binary_Result.xlsx --sheet 组件报告 --sheet_ext 漏洞报告 -o cve.xlsx\n  ")
 }
 
 pub fn handler(matches: &ArgMatches) {
@@ -33,12 +45,22 @@ pub fn handler(matches: &ArgMatches) {
     let path = matches.get_one::<String>("path").unwrap();
     let file = matches.get_one::<String>("file").unwrap();
     let sheet = matches.get_one::<String>("sheet").unwrap();
+    let sheet_ext = matches.get_one::<String>("sheet_ext").unwrap();
+    let output = matches.get_one::<String>("output").unwrap();
 
     if !Path::exists(Path::new(path)) {
         fs::create_dir(path).unwrap();
     };
 
     let mut workbook = Excel::open(file).unwrap();
+    let output = format!("{}/{}", path, output);
+    let mut out = Workbook::new(output.as_str());
+    let cve_map = parse_cve_detail(&mut workbook, sheet_ext, &mut out);
+    parse_object(&mut workbook, sheet, &mut out, cve_map);
+    
+}
+
+fn parse_object(workbook: &mut Excel, sheet: &str, out: &mut Workbook, cve_map: HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
     let mut version_index: usize = 0;
@@ -47,10 +69,8 @@ pub fn handler(matches: &ArgMatches) {
     let mut object_map: HashMap<String, Vec<String>> = HashMap::new();
     for (index, vals) in range.rows().enumerate() {
         if index == 0 {
-            println!("{:#?}", vals);
             for (header_idx, header_content) in vals.iter().enumerate() {
                 if let office::DataType::String(val) = header_content {
-                    // println!("{:#?}", val);
                     if val == "Component" {
                         component_index = header_idx;
                     } else if val == "Version" {
@@ -142,10 +162,10 @@ pub fn handler(matches: &ArgMatches) {
             let mut object: Vec<&str> = object.split('#').collect();
             if let Some(object) = object.pop() {
                 let object = object.trim_end_matches(".tar_");
-                println!(
-                    "object:{:#?}\ncomponent:{:#?}\nversion:{:#?}\nvulnerability:{}",
-                    object, component, version, vulnerability
-                );
+                // println!(
+                //     "object:{:#?}\ncomponent:{:#?}\nversion:{:#?}\nvulnerability:{}",
+                //     object, component, version, vulnerability
+                // );
                 if object.is_empty() || component.is_empty() || version.is_empty() {
                     continue;
                 }
@@ -163,22 +183,146 @@ pub fn handler(matches: &ArgMatches) {
 
     println!("{:#?}", object_map.len());
     if !object_map.is_empty() {
-        let output = format!("{}/{}", path, "cve.xlsx");
-        println!("{:#?}", output);
-        let out = Workbook::new(output.as_str());
         let format1 = out
             .add_format()
             .set_align(FormatAlignment::Center)
             .set_bg_color(FormatColor::Red);
-        let format2 = out.add_format().set_align(FormatAlignment::Center);
-        let mut sheet1 = out.add_worksheet(None).unwrap();
+        let format2 = out.add_format().set_align(FormatAlignment::Left);
+        let mut sheet1 = out.add_worksheet(Some("image")).unwrap();
         sheet1.write_string(0, 0, "image", Some(&format1)).unwrap();
         sheet1
             .write_string(0, 1, "dependencies", Some(&format1))
             .unwrap();
+            sheet1
+            .write_string(0, 2, "cves", Some(&format1))
+            .unwrap();
 
         for (index, (k, v)) in object_map.iter().enumerate() {
-            println!("{:#?}: \n{:#?}", k, v);
+            // println!("{:#?}: \n{:#?}", k, v);
+            sheet1
+                .write_string((index + 1) as u32, 0, k, Some(&format2))
+                .unwrap();
+            sheet1
+                .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
+                .unwrap();
+
+            // add row of cves
+            let mut cves: Vec<String> = Vec::new();
+            for comp_key in v.iter() {
+                let comp_key: Vec<&str> = comp_key.split(":  ").collect();
+                let comp_key = comp_key[0];
+                if let Some(cve) = cve_map.get(comp_key) {
+                    cves.extend_from_slice(cve);
+                }
+            }
+            sheet1
+                .write_string((index + 1) as u32, 2, cves.join("\n").as_str(), Some(&format2))
+                .unwrap();
+        }
+    }
+
+    object_map
+}
+
+fn parse_cve_detail(workbook: &mut Excel, sheet: &str, out: &mut Workbook) -> HashMap<String, Vec<String>> {
+    let range = workbook.worksheet_range(sheet).unwrap();
+    let mut component_index: usize = 0;
+    let mut version_index: usize = 0;
+    let mut cve_index: usize = 0;
+    let mut component_map: HashMap<String, Vec<String>> = HashMap::new();
+    for (index, vals) in range.rows().enumerate() {
+        if index == 0 {
+            for (header_idx, header_content) in vals.iter().enumerate() {
+                if let office::DataType::String(val) = header_content {
+                    if val == "Component" {
+                        component_index = header_idx;
+                    } else if val == "Version" {
+                        version_index = header_idx;
+                    } else if val == "CVE" {
+                        cve_index = header_idx;
+                    }
+                }
+            }
+            println!(
+                "component_index:{:#?}\nversion_index:{:#?}\ncve_index:{:#?}",
+                component_index, version_index, cve_index
+            );
+            if component_index == version_index
+                || component_index == cve_index
+                || version_index == cve_index
+            {
+                break;
+            }
+        } else {
+            let component = match vals.get(component_index) {
+                Some(v) => match v {
+                    DataType::String(v) => v,
+                    DataType::Int(_)
+                    | DataType::Float(_)
+                    | DataType::Bool(_)
+                    | DataType::Error(_)
+                    | DataType::Empty => "",
+                },
+                None => "",
+            };
+
+            let version = match vals.get(version_index) {
+                Some(v) => match v {
+                    DataType::String(v) => v,
+                    DataType::Int(_)
+                    | DataType::Float(_)
+                    | DataType::Bool(_)
+                    | DataType::Error(_)
+                    | DataType::Empty => "",
+                },
+                None => "",
+            };
+            let cve = match vals.get(cve_index) {
+                Some(v) => match v {
+                    DataType::String(v) => v,
+                    DataType::Int(_)
+                    | DataType::Float(_)
+                    | DataType::Bool(_)
+                    | DataType::Error(_)
+                    | DataType::Empty => "",
+                },
+                None => "",
+            };
+
+            // println!(
+            //     "component:{:#?}\nversion:{:#?}\ncve:{}",
+            //     component, version, cve
+            // );
+            if cve.is_empty() || component.is_empty() || version.is_empty() {
+                continue;
+            }
+            let component = format!("{}{}", component, version);
+            let cve_inner = cve.to_string();
+            if let Some(components) = component_map.get_mut(&component) {
+                if !components.contains(&cve_inner) {
+                    components.push(cve_inner);
+                }
+            } else {
+                component_map.insert(component.to_string(), vec![cve_inner]);
+            }
+        }
+    }
+
+    println!("{:#?}", component_map.len());
+    if !component_map.is_empty() {
+        let format1 = out
+            .add_format()
+            .set_align(FormatAlignment::Center)
+            .set_bg_color(FormatColor::Red);
+        let format2 = out.add_format().set_align(FormatAlignment::Left);
+        let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
+        sheet1
+            .write_string(0, 0, "component", Some(&format1))
+            .unwrap();
+        sheet1.write_string(0, 1, "cve", Some(&format1)).unwrap();
+
+        for (index, (k, v)) in component_map.iter().enumerate() {
+            // println!("{:#?}: \n{:#?}", k, v);
             sheet1
                 .write_string((index + 1) as u32, 0, k, Some(&format2))
                 .unwrap();
@@ -187,4 +331,6 @@ pub fn handler(matches: &ArgMatches) {
                 .unwrap();
         }
     }
+
+    component_map
 }
