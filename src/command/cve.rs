@@ -52,15 +52,25 @@ pub fn handler(matches: &ArgMatches) {
         fs::create_dir(path).unwrap();
     };
 
+    // output
     let mut workbook = Excel::open(file).unwrap();
     let output = format!("{}/{}", path, output);
     let mut out = Workbook::new(output.as_str());
+    println!("inuput: {:#?}\noutput: {:#?}", file, output);
+
+    // parse component's cve
     let cve_map = parse_cve_detail(&mut workbook, sheet_ext, &mut out);
+
+    // parse object's component
     parse_object(&mut workbook, sheet, &mut out, cve_map);
-    
 }
 
-fn parse_object(workbook: &mut Excel, sheet: &str, out: &mut Workbook, cve_map: HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
+fn parse_object(
+    workbook: &mut Excel,
+    sheet: &str,
+    out: &mut Workbook,
+    cve_map: HashMap<String, Vec<String>>,
+) -> HashMap<String, Vec<String>> {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
     let mut version_index: usize = 0;
@@ -83,7 +93,7 @@ fn parse_object(workbook: &mut Excel, sheet: &str, out: &mut Workbook, cve_map: 
                 }
             }
             println!(
-                "object_index:{:#?}\ncomponent_index:{:#?}\nversion_index:{:#?}\nvulnerability_index:{:#?}",
+                "object_index:{:#?} component_index:{:#?} version_index:{:#?} vulnerability_index:{:#?}",
                 object_index, component_index, version_index, vulnerability_index
             );
             if component_index == version_index
@@ -181,7 +191,7 @@ fn parse_object(workbook: &mut Excel, sheet: &str, out: &mut Workbook, cve_map: 
         }
     }
 
-    println!("{:#?}", object_map.len());
+    println!("object num:{:#?}", object_map.len());
     if !object_map.is_empty() {
         let format1 = out
             .add_format()
@@ -193,9 +203,7 @@ fn parse_object(workbook: &mut Excel, sheet: &str, out: &mut Workbook, cve_map: 
         sheet1
             .write_string(0, 1, "dependencies", Some(&format1))
             .unwrap();
-            sheet1
-            .write_string(0, 2, "cves", Some(&format1))
-            .unwrap();
+        sheet1.write_string(0, 2, "cves", Some(&format1)).unwrap();
 
         for (index, (k, v)) in object_map.iter().enumerate() {
             // println!("{:#?}: \n{:#?}", k, v);
@@ -216,7 +224,12 @@ fn parse_object(workbook: &mut Excel, sheet: &str, out: &mut Workbook, cve_map: 
                 }
             }
             sheet1
-                .write_string((index + 1) as u32, 2, cves.join("\n").as_str(), Some(&format2))
+                .write_string(
+                    (index + 1) as u32,
+                    2,
+                    cves.join("\n").as_str(),
+                    Some(&format2),
+                )
                 .unwrap();
         }
     }
@@ -224,7 +237,11 @@ fn parse_object(workbook: &mut Excel, sheet: &str, out: &mut Workbook, cve_map: 
     object_map
 }
 
-fn parse_cve_detail(workbook: &mut Excel, sheet: &str, out: &mut Workbook) -> HashMap<String, Vec<String>> {
+fn parse_cve_detail(
+    workbook: &mut Excel,
+    sheet: &str,
+    out: &mut Workbook,
+) -> HashMap<String, Vec<String>> {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
     let mut version_index: usize = 0;
@@ -244,7 +261,7 @@ fn parse_cve_detail(workbook: &mut Excel, sheet: &str, out: &mut Workbook) -> Ha
                 }
             }
             println!(
-                "component_index:{:#?}\nversion_index:{:#?}\ncve_index:{:#?}",
+                "component_index:{:#?} version_index:{:#?} cve_index:{:#?}",
                 component_index, version_index, cve_index
             );
             if component_index == version_index
@@ -308,7 +325,7 @@ fn parse_cve_detail(workbook: &mut Excel, sheet: &str, out: &mut Workbook) -> Ha
         }
     }
 
-    println!("{:#?}", component_map.len());
+    println!("component num: {:#?}", component_map.len());
     if !component_map.is_empty() {
         let format1 = out
             .add_format()
