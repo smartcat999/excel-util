@@ -74,13 +74,14 @@ pub fn handler(matches: &ArgMatches) {
     }
 
     write_component_output(&component_map, &mut out);
-    write_object_output(object_map, component_map, &mut out);
+    write_object_output(&object_map, &component_map, &mut out);
+    println!("object num: {:?}\ncomponent num: {:?}", object_map.len(), component_map.len());
     println!("inuput: {:#?}\noutput: {:#?}", files, output);
 }
 
 fn write_object_output(
-    object_map: HashMap<String, Vec<String>>,
-    component_map: HashMap<String, Vec<String>>,
+    object_map: &HashMap<String, Vec<String>>,
+    component_map: &HashMap<String, Vec<String>>,
     out: &mut Workbook,
 ) {
     if !object_map.is_empty() {
@@ -98,7 +99,7 @@ fn write_object_output(
 
         let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
         object_keys.sort();
-        println!("object: {:#?}", object_keys);
+        // println!("object: {:#?}", object_keys);
         for (index, k) in object_keys.iter().enumerate() {
             // println!("{:#?}: \n{:#?}", k, v);
             if let Some(v) = object_map.get(k) {
@@ -153,10 +154,10 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
                     }
                 }
             }
-            println!(
-                "object_index:{:#?} component_index:{:#?} version_index:{:#?} vulnerability_index:{:#?}",
-                object_index, component_index, version_index, vulnerability_index
-            );
+            // println!(
+            //     "object_index:{:#?} component_index:{:#?} version_index:{:#?} vulnerability_index:{:#?}",
+            //     object_index, component_index, version_index, vulnerability_index
+            // );
             if component_index == version_index
                 || component_index == object_index
                 || component_index == vulnerability_index
@@ -252,7 +253,6 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
         }
     }
 
-    println!("object num:{:#?}", object_map.len());
 }
 
 fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mut Workbook) {
@@ -270,9 +270,8 @@ fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mu
 
         let mut component_keys: Vec<String> = component_map.keys().map(|x| x.to_string()).collect();
         component_keys.sort();
-        println!("component: {:#?}", component_keys);
+
         for (index, k) in component_keys.iter().enumerate() {
-            // println!("{:#?}: \n{:#?}", k, v);
             if let Some(v) = component_map.get(k) {
                 sheet1
                     .write_string((index + 1) as u32, 0, k, Some(&format2))
@@ -308,10 +307,10 @@ fn parse_component_detail(
                     }
                 }
             }
-            println!(
-                "component_index:{:#?} version_index:{:#?} cve_index:{:#?}",
-                component_index, version_index, cve_index
-            );
+            // println!(
+            //     "component_index:{:#?} version_index:{:#?} cve_index:{:#?}",
+            //     component_index, version_index, cve_index
+            // );
             if component_index == version_index
                 || component_index == cve_index
                 || version_index == cve_index
@@ -354,10 +353,6 @@ fn parse_component_detail(
                 None => "",
             };
 
-            // println!(
-            //     "component:{:#?}\nversion:{:#?}\ncve:{}",
-            //     component, version, cve
-            // );
             if cve.is_empty() || component.is_empty() || version.is_empty() {
                 continue;
             }
@@ -373,5 +368,4 @@ fn parse_component_detail(
         }
     }
 
-    println!("component num: {:#?}", component_map.len());
 }
