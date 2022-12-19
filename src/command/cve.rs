@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, path::Path};
 
-use clap::{App, Arg, ArgAction, ArgMatches, Command, value_parser};
+use clap::{value_parser, App, Arg, ArgAction, ArgMatches, Command};
 use office::{DataType, Excel};
 use xlsxwriter::{FormatAlignment, FormatColor, Workbook};
 
@@ -75,7 +75,11 @@ pub fn handler(matches: &ArgMatches) {
 
     write_component_output(&component_map, &mut out);
     write_object_output(&object_map, &component_map, &mut out);
-    println!("object num: {:?}\ncomponent num: {:?}", object_map.len(), component_map.len());
+    println!(
+        "object num: {:?}\ncomponent num: {:?}",
+        object_map.len(),
+        component_map.len()
+    );
     println!("inuput: {:#?}\noutput: {:#?}", files, output);
 }
 
@@ -96,6 +100,7 @@ fn write_object_output(
             .write_string(0, 1, "dependencies", Some(&format1))
             .unwrap();
         sheet1.write_string(0, 2, "cves", Some(&format1)).unwrap();
+        sheet1.write_string(0, 3, "num", Some(&format1)).unwrap();
 
         let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
         object_keys.sort();
@@ -126,6 +131,9 @@ fn write_object_output(
                         cves.join("\n").as_str(),
                         Some(&format2),
                     )
+                    .unwrap();
+                sheet1
+                    .write_number((index + 1) as u32, 3, cves.len() as f64, Some(&format2))
                     .unwrap();
             }
         }
@@ -252,7 +260,6 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
             }
         }
     }
-
 }
 
 fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mut Workbook) {
@@ -267,6 +274,7 @@ fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mu
             .write_string(0, 0, "component", Some(&format1))
             .unwrap();
         sheet1.write_string(0, 1, "cve", Some(&format1)).unwrap();
+        sheet1.write_string(0, 2, "num", Some(&format1)).unwrap();
 
         let mut component_keys: Vec<String> = component_map.keys().map(|x| x.to_string()).collect();
         component_keys.sort();
@@ -278,6 +286,9 @@ fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mu
                     .unwrap();
                 sheet1
                     .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_number((index + 1) as u32, 2, v.len() as f64, Some(&format2))
                     .unwrap();
             }
         }
@@ -367,5 +378,4 @@ fn parse_component_detail(
             }
         }
     }
-
 }
