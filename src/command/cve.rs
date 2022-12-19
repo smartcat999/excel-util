@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, path::Path};
 
-use clap::{App, Arg, ArgMatches, Command};
+use clap::{App, Arg, ArgAction, ArgMatches, Command};
 use office::{DataType, Excel};
 use xlsxwriter::{FormatAlignment, FormatColor, Workbook};
 
@@ -15,7 +15,8 @@ pub fn new_sub_command<'help>() -> App<'help> {
         )
         .arg(
             Arg::new("file")
-                .default_value("./Open_Source_Binary_Result.xlsx")
+                .action(ArgAction::Append)
+                .default_values(&["./Open_Source_Binary_Result.xlsx"])
                 .short('f')
                 .help("待处理的Excel文件路径"),
         )
@@ -41,9 +42,11 @@ pub fn new_sub_command<'help>() -> App<'help> {
 }
 
 pub fn handler(matches: &ArgMatches) {
-    // println!("{:#?}", matches)
     let path = matches.get_one::<String>("path").unwrap();
-    let file = matches.get_one::<String>("file").unwrap();
+    let files: Vec<&String> = matches
+        .get_many::<String>("file")
+        .unwrap()
+        .collect::<Vec<&String>>();
     let sheet = matches.get_one::<String>("sheet").unwrap();
     let sheet_ext = matches.get_one::<String>("sheet_ext").unwrap();
     let output = matches.get_one::<String>("output").unwrap();
@@ -53,30 +56,87 @@ pub fn handler(matches: &ArgMatches) {
     };
 
     // output
-    let mut workbook = Excel::open(file).unwrap();
     let output = format!("{}/{}", path, output);
     let mut out = Workbook::new(output.as_str());
-    println!("inuput: {:#?}\noutput: {:#?}", file, output);
 
-    // parse component's cve
-    let cve_map = parse_cve_detail(&mut workbook, sheet_ext, &mut out);
+    let mut object_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut component_map: HashMap<String, Vec<String>> = HashMap::new();
 
-    // parse object's component
-    parse_object(&mut workbook, sheet, &mut out, cve_map);
+    for file in files.iter() {
+        let mut workbook = Excel::open(file).unwrap();
+
+        // parse component's cve
+        parse_component_detail(&mut workbook, sheet_ext, &mut component_map);
+
+        // parse object's component
+        parse_object(&mut workbook, sheet, &mut object_map);
+    }
+
+    write_component_output(&component_map, &mut out);
+    write_object_output(object_map, component_map, &mut out);
+    println!("inuput: {:#?}\noutput: {:#?}", files, output);
 }
 
-fn parse_object(
-    workbook: &mut Excel,
-    sheet: &str,
+fn write_object_output(
+    object_map: HashMap<String, Vec<String>>,
+    component_map: HashMap<String, Vec<String>>,
     out: &mut Workbook,
-    cve_map: HashMap<String, Vec<String>>,
-) -> HashMap<String, Vec<String>> {
+) {
+    if !object_map.is_empty() {
+        let format1 = out
+            .add_format()
+            .set_align(FormatAlignment::Center)
+            .set_bg_color(FormatColor::Red);
+        let format2 = out.add_format().set_align(FormatAlignment::Left);
+        let mut sheet1 = out.add_worksheet(Some("image")).unwrap();
+        sheet1.write_string(0, 0, "image", Some(&format1)).unwrap();
+        sheet1
+            .write_string(0, 1, "dependencies", Some(&format1))
+            .unwrap();
+        sheet1.write_string(0, 2, "cves", Some(&format1)).unwrap();
+
+        let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
+        object_keys.sort();
+        println!("object: {:#?}", object_keys);
+        for (index, k) in object_keys.iter().enumerate() {
+            // println!("{:#?}: \n{:#?}", k, v);
+            if let Some(v) = object_map.get(k) {
+                sheet1
+                    .write_string((index + 1) as u32, 0, k, Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
+                    .unwrap();
+
+                // add row of cves
+                let mut cves: Vec<String> = Vec::new();
+                for comp_key in v.iter() {
+                    let comp_key: Vec<&str> = comp_key.split(":  ").collect();
+                    let comp_key = comp_key[0];
+                    if let Some(cve) = component_map.get(comp_key) {
+                        cves.extend_from_slice(cve);
+                    }
+                }
+                sheet1
+                    .write_string(
+                        (index + 1) as u32,
+                        2,
+                        cves.join("\n").as_str(),
+                        Some(&format2),
+                    )
+                    .unwrap();
+            }
+        }
+    }
+}
+
+fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<String, Vec<String>>) {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
     let mut version_index: usize = 0;
     let mut object_index: usize = 0;
     let mut vulnerability_index: usize = 0;
-    let mut object_map: HashMap<String, Vec<String>> = HashMap::new();
+
     for (index, vals) in range.rows().enumerate() {
         if index == 0 {
             for (header_idx, header_content) in vals.iter().enumerate() {
@@ -192,66 +252,48 @@ fn parse_object(
     }
 
     println!("object num:{:#?}", object_map.len());
-    if !object_map.is_empty() {
+}
+
+fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mut Workbook) {
+    if !component_map.is_empty() {
         let format1 = out
             .add_format()
             .set_align(FormatAlignment::Center)
             .set_bg_color(FormatColor::Red);
         let format2 = out.add_format().set_align(FormatAlignment::Left);
-        let mut sheet1 = out.add_worksheet(Some("image")).unwrap();
-        sheet1.write_string(0, 0, "image", Some(&format1)).unwrap();
+        let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
         sheet1
-            .write_string(0, 1, "dependencies", Some(&format1))
+            .write_string(0, 0, "component", Some(&format1))
             .unwrap();
-        sheet1.write_string(0, 2, "cves", Some(&format1)).unwrap();
+        sheet1.write_string(0, 1, "cve", Some(&format1)).unwrap();
 
-        let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
-        object_keys.sort();
-        println!("object: {:#?}", object_keys);
-        for (index, k) in object_keys.iter().enumerate() {
+        let mut component_keys: Vec<String> = component_map.keys().map(|x| x.to_string()).collect();
+        component_keys.sort();
+        println!("component: {:#?}", component_keys);
+        for (index, k) in component_keys.iter().enumerate() {
             // println!("{:#?}: \n{:#?}", k, v);
-            if let Some(v) = object_map.get(k) {
+            if let Some(v) = component_map.get(k) {
                 sheet1
                     .write_string((index + 1) as u32, 0, k, Some(&format2))
                     .unwrap();
                 sheet1
                     .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
                     .unwrap();
-
-                // add row of cves
-                let mut cves: Vec<String> = Vec::new();
-                for comp_key in v.iter() {
-                    let comp_key: Vec<&str> = comp_key.split(":  ").collect();
-                    let comp_key = comp_key[0];
-                    if let Some(cve) = cve_map.get(comp_key) {
-                        cves.extend_from_slice(cve);
-                    }
-                }
-                sheet1
-                    .write_string(
-                        (index + 1) as u32,
-                        2,
-                        cves.join("\n").as_str(),
-                        Some(&format2),
-                    )
-                    .unwrap();
             }
         }
     }
-
-    object_map
 }
 
-fn parse_cve_detail(
+fn parse_component_detail(
     workbook: &mut Excel,
     sheet: &str,
-    out: &mut Workbook,
-) -> HashMap<String, Vec<String>> {
+    component_map: &mut HashMap<String, Vec<String>>,
+) {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
     let mut version_index: usize = 0;
     let mut cve_index: usize = 0;
-    let mut component_map: HashMap<String, Vec<String>> = HashMap::new();
+
     for (index, vals) in range.rows().enumerate() {
         if index == 0 {
             for (header_idx, header_content) in vals.iter().enumerate() {
@@ -331,33 +373,4 @@ fn parse_cve_detail(
     }
 
     println!("component num: {:#?}", component_map.len());
-    if !component_map.is_empty() {
-        let format1 = out
-            .add_format()
-            .set_align(FormatAlignment::Center)
-            .set_bg_color(FormatColor::Red);
-        let format2 = out.add_format().set_align(FormatAlignment::Left);
-        let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
-        sheet1
-            .write_string(0, 0, "component", Some(&format1))
-            .unwrap();
-        sheet1.write_string(0, 1, "cve", Some(&format1)).unwrap();
-
-        let mut component_keys: Vec<String> = component_map.keys().map(|x| x.to_string()).collect();
-        component_keys.sort();
-        println!("component: {:#?}", component_keys);
-        for (index, k) in component_keys.iter().enumerate() {
-            // println!("{:#?}: \n{:#?}", k, v);
-            if let Some(v) = component_map.get(k) {
-                sheet1
-                    .write_string((index + 1) as u32, 0, k, Some(&format2))
-                    .unwrap();
-                sheet1
-                    .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
-                    .unwrap();
-            }
-        }
-    }
-
-    component_map
 }
