@@ -1,5 +1,5 @@
 .PHONY: all 
-all: build-linux build-windows build-macos
+all: build-linux build-windows build-macos build-macos-intel
 
 build-local:
 	cargo build --release
@@ -12,6 +12,9 @@ build-windows:
 
 build-macos:
 	cargo build --release --target=aarch64-apple-darwin
+
+build-macos-intel:
+	cargo build --release --target=x86_64-apple-darwin
 
 clean:
 	cargo clean
