@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, path::Path};
 
-use clap::{App, Arg, ArgAction, ArgMatches, Command};
+use clap::{App, Arg, ArgAction, ArgMatches, Command, value_parser};
 use office::{DataType, Excel};
 use xlsxwriter::{FormatAlignment, FormatColor, Workbook};
 
@@ -16,6 +16,7 @@ pub fn new_sub_command<'help>() -> App<'help> {
         .arg(
             Arg::new("file")
                 .action(ArgAction::Append)
+                .value_parser(value_parser!(String))
                 .default_values(&["./Open_Source_Binary_Result.xlsx"])
                 .short('f')
                 .help("待处理的Excel文件路径"),
