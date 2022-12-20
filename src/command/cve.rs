@@ -4,6 +4,12 @@ use clap::{value_parser, App, Arg, ArgAction, ArgMatches, Command};
 use office::{DataType, Excel};
 use xlsxwriter::{FormatAlignment, FormatColor, Workbook};
 
+const COLUMN_FILED_COMPONENT: &str = "Component";
+const COLUMN_FILED_VERSION: &str = "Version";
+const COLUMN_FILED_OBJECT: &str = "Object full path";
+const COLUMN_FILED_VUL_COUNT: &str = "Vulnerability count";
+const COLUMN_FILED_CVE: &str = "CVE";
+
 pub fn new_sub_command<'help>() -> App<'help> {
     Command::new("cve")
         .about("整理CVE漏洞信息")
@@ -151,13 +157,13 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
         if index == 0 {
             for (header_idx, header_content) in vals.iter().enumerate() {
                 if let office::DataType::String(val) = header_content {
-                    if val == "Component" {
+                    if val == COLUMN_FILED_COMPONENT {
                         component_index = header_idx;
-                    } else if val == "Version" {
+                    } else if val == COLUMN_FILED_VERSION {
                         version_index = header_idx;
-                    } else if val == "Object full path" {
+                    } else if val == COLUMN_FILED_OBJECT {
                         object_index = header_idx;
-                    } else if val == "Vulnerability count" {
+                    } else if val == COLUMN_FILED_VUL_COUNT {
                         vulnerability_index = header_idx;
                     }
                 }
@@ -309,11 +315,11 @@ fn parse_component_detail(
         if index == 0 {
             for (header_idx, header_content) in vals.iter().enumerate() {
                 if let office::DataType::String(val) = header_content {
-                    if val == "Component" {
+                    if val == COLUMN_FILED_COMPONENT {
                         component_index = header_idx;
-                    } else if val == "Version" {
+                    } else if val == COLUMN_FILED_VERSION {
                         version_index = header_idx;
-                    } else if val == "CVE" {
+                    } else if val == COLUMN_FILED_CVE {
                         cve_index = header_idx;
                     }
                 }
