@@ -68,12 +68,13 @@ pub fn handler(matches: &ArgMatches) {
 
     let mut object_map: HashMap<String, Vec<String>> = HashMap::new();
     let mut component_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut cve_map: HashMap<String, String> = HashMap::new();
 
     for file in files.iter() {
         let mut workbook = Excel::open(file).unwrap();
 
         // parse component's cve
-        parse_component_detail(&mut workbook, sheet_ext, &mut component_map);
+        parse_component_cves(&mut workbook, sheet_ext, &mut component_map, &mut cve_map);
 
         // parse object's component
         parse_object(&mut workbook, sheet, &mut object_map);
@@ -81,10 +82,12 @@ pub fn handler(matches: &ArgMatches) {
 
     write_component_output(&component_map, &mut out);
     write_object_output(&object_map, &component_map, &mut out);
+    write_cve_output(&cve_map, &mut out);
     println!(
-        "object num: {:?}\ncomponent num: {:?}",
+        "object num: {:?}\ncomponent num: {:?}\ncve num: {:?}",
         object_map.len(),
-        component_map.len()
+        component_map.len(),
+        cve_map.len()
     );
     println!("inuput: {:#?}\noutput: {:#?}", files, output);
 }
@@ -275,7 +278,7 @@ fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mu
             .set_align(FormatAlignment::Center)
             .set_bg_color(FormatColor::Red);
         let format2 = out.add_format().set_align(FormatAlignment::Left);
-        let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
+        let mut sheet1 = out.add_worksheet(Some("component")).unwrap();
         sheet1
             .write_string(0, 0, "component", Some(&format1))
             .unwrap();
@@ -301,10 +304,11 @@ fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mu
     }
 }
 
-fn parse_component_detail(
+fn parse_component_cves(
     workbook: &mut Excel,
     sheet: &str,
     component_map: &mut HashMap<String, Vec<String>>,
+    cve_map: &mut HashMap<String, String>,
 ) {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
@@ -375,12 +379,46 @@ fn parse_component_detail(
             }
             let component = format!("{}{}", component, version);
             let cve_inner = cve.to_string();
-            if let Some(components) = component_map.get_mut(&component) {
-                if !components.contains(&cve_inner) {
-                    components.push(cve_inner);
+            if let Some(cves) = component_map.get_mut(&component) {
+                if !cves.contains(&cve_inner) {
+                    cves.push(cve_inner.clone());
                 }
             } else {
-                component_map.insert(component.to_string(), vec![cve_inner]);
+                component_map.insert(component.to_string(), vec![cve_inner.clone()]);
+            }
+
+            if !cve_map.contains_key(&cve_inner) {
+                cve_map.insert(
+                    cve_inner.clone(),
+                    format!("https://avd.aliyun.com/detail?id={}", cve_inner),
+                );
+            }
+        }
+    }
+}
+
+fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook) {
+    if !cve_map.is_empty() {
+        let format1 = out
+            .add_format()
+            .set_align(FormatAlignment::Center)
+            .set_bg_color(FormatColor::Red);
+        let format2 = out.add_format().set_align(FormatAlignment::Left);
+        let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
+        sheet1.write_string(0, 0, "cve", Some(&format1)).unwrap();
+        sheet1.write_string(0, 1, "link", Some(&format1)).unwrap();
+
+        let mut cve_keys: Vec<String> = cve_map.keys().map(|x| x.to_string()).collect();
+        cve_keys.sort();
+
+        for (index, k) in cve_keys.iter().enumerate() {
+            if let Some(v) = cve_map.get(k) {
+                sheet1
+                    .write_string((index + 1) as u32, 0, k, Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_url((index + 1) as u32, 1, v, Some(&format2))
+                    .unwrap();
             }
         }
     }
