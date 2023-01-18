@@ -3,6 +3,9 @@ pub mod command;
 extern crate clap;
 use clap::App;
 
+#[macro_use]
+extern crate lazy_static;
+
 fn main() {
     let mut args = App::new("Excel工具")
         .version("v1.0")

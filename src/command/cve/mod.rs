@@ -1,14 +1,27 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs, path::Path, sync::Mutex};
 
 use clap::{value_parser, App, Arg, ArgAction, ArgMatches, Command};
 use office::{DataType, Excel};
 use xlsxwriter::{FormatAlignment, FormatColor, Workbook};
+
+pub mod api;
+pub mod lib;
+
+use lib::CveApis;
 
 const COLUMN_FILED_COMPONENT: &str = "Component";
 const COLUMN_FILED_VERSION: &str = "Version";
 const COLUMN_FILED_OBJECT: &str = "Object full path";
 const COLUMN_FILED_VUL_COUNT: &str = "Vulnerability count";
 const COLUMN_FILED_CVE: &str = "CVE";
+
+lazy_static! {
+    pub static ref CVE_API: Mutex<CveApis> = {
+        let mut cve_apis = lib::CveApis::new();
+        cve_apis.register(Box::new(api::aliyun_api::AliyunApi::new()));
+        Mutex::new(cve_apis)
+    };
+}
 
 pub fn new_sub_command<'help>() -> App<'help> {
     Command::new("cve")
@@ -407,6 +420,21 @@ fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook) {
         let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
         sheet1.write_string(0, 0, "cve", Some(&format1)).unwrap();
         sheet1.write_string(0, 1, "link", Some(&format1)).unwrap();
+        sheet1.write_string(0, 2, "title", Some(&format1)).unwrap();
+        sheet1
+            .write_string(0, 3, "fix_label", Some(&format1))
+            .unwrap();
+        sheet1
+            .write_string(0, 4, "publish", Some(&format1))
+            .unwrap();
+        sheet1
+            .write_string(0, 5, "description", Some(&format1))
+            .unwrap();
+        sheet1
+            .write_string(0, 6, "suggestion", Some(&format1))
+            .unwrap();
+        sheet1.write_string(0, 7, "score", Some(&format1)).unwrap();
+        sheet1.write_string(0, 8, "effect", Some(&format1)).unwrap();
 
         let mut cve_keys: Vec<String> = cve_map.keys().map(|x| x.to_string()).collect();
         cve_keys.sort();
@@ -418,6 +446,39 @@ fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook) {
                     .unwrap();
                 sheet1
                     .write_url((index + 1) as u32, 1, v, Some(&format2))
+                    .unwrap();
+                let ret = CVE_API.lock().unwrap().invoke("AliyunApi", k);
+                // println!("{:#?}", ret.to_json());
+                sheet1
+                    .write_string((index + 1) as u32, 2, &ret.get("title"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 3, &ret.get("fix_label"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 4, &ret.get("publish"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string(
+                        (index + 1) as u32,
+                        5,
+                        &ret.get("description"),
+                        Some(&format2),
+                    )
+                    .unwrap();
+                sheet1
+                    .write_string(
+                        (index + 1) as u32,
+                        6,
+                        &ret.get("suggestion"),
+                        Some(&format2),
+                    )
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 7, &ret.get("score"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 8, &ret.get("effect"), Some(&format2))
                     .unwrap();
             }
         }
