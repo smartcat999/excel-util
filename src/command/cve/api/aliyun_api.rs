@@ -87,7 +87,7 @@ impl CveApi for AliyunApi {
                 cve = self.parser_html(v.text().unwrap().as_str());
             }
             Err(err) => {
-                panic!("{:#?}", err);
+                println!("{:#?}", err);
             }
         }
         Box::new(cve)

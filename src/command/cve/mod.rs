@@ -58,7 +58,13 @@ pub fn new_sub_command<'help>() -> App<'help> {
                 .short('o')
                 .help("输出的Excel文件表格名称"),
         )
-        .override_usage("etool cve -p ./tmp -f Open_Source_Binary_Result.xlsx --sheet 组件报告 --sheet_ext 漏洞报告 -o cve.xlsx\n  ")
+        .arg(
+            Arg::new("detail")
+                .long("detail")
+                .action(clap::ArgAction::SetTrue)
+                .help("是否输出CVE详细信息"),
+        )
+        .override_usage("etool cve -p ./tmp -f Open_Source_Binary_Result.xlsx --sheet 组件报告 --sheet_ext 漏洞报告 --detail -o cve.xlsx\n  ")
 }
 
 pub fn handler(matches: &ArgMatches) {
@@ -69,6 +75,7 @@ pub fn handler(matches: &ArgMatches) {
         .collect::<Vec<&String>>();
     let sheet = matches.get_one::<String>("sheet").unwrap();
     let sheet_ext = matches.get_one::<String>("sheet_ext").unwrap();
+    let detail = matches.get_flag("detail");
     let output = matches.get_one::<String>("output").unwrap();
 
     if !Path::exists(Path::new(path)) {
@@ -95,7 +102,7 @@ pub fn handler(matches: &ArgMatches) {
 
     write_component_output(&component_map, &mut out);
     write_object_output(&object_map, &component_map, &mut out);
-    write_cve_output(&cve_map, &mut out);
+    write_cve_output(&cve_map, &mut out, detail);
     println!(
         "object num: {:?}\ncomponent num: {:?}\ncve num: {:?}",
         object_map.len(),
@@ -127,36 +134,57 @@ fn write_object_output(
         let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
         object_keys.sort();
         // println!("object: {:#?}", object_keys);
-        for (index, k) in object_keys.iter().enumerate() {
+        let mut global_index: usize = 1;
+        for (_, k) in object_keys.iter().enumerate() {
             // println!("{:#?}: \n{:#?}", k, v);
             if let Some(v) = object_map.get(k) {
-                sheet1
-                    .write_string((index + 1) as u32, 0, k, Some(&format2))
-                    .unwrap();
-                sheet1
-                    .write_string((index + 1) as u32, 1, v.join("\n").as_str(), Some(&format2))
-                    .unwrap();
-
-                // add row of cves
-                let mut cves: Vec<String> = Vec::new();
-                for comp_key in v.iter() {
-                    let comp_key: Vec<&str> = comp_key.split(":  ").collect();
+                let merge_start_row = global_index as u32;
+                let mut merge_cve_num: u32 = 0;
+                for v in v.iter() {
+                    sheet1
+                        .write_string(global_index as u32, 0, k, Some(&format2))
+                        .unwrap();
+                    sheet1
+                        .write_string(global_index as u32, 1, v.as_str(), Some(&format2))
+                        .unwrap();
+                    let comp_key: Vec<&str> = v.split(":  ").collect();
                     let comp_key = comp_key[0];
+                    let mut cves: Vec<String> = Vec::new();
                     if let Some(cve) = component_map.get(comp_key) {
                         cves.extend_from_slice(cve);
+                        sheet1
+                            .write_string(
+                                global_index as u32,
+                                2,
+                                cves.join("\n").as_str(),
+                                Some(&format2),
+                            )
+                            .unwrap();
+                        sheet1
+                            .write_number(global_index as u32, 3, cves.len() as f64, Some(&format2))
+                            .unwrap();
+                        merge_cve_num += cves.len() as u32;
                     }
+                    global_index += 1;
                 }
-                sheet1
-                    .write_string(
-                        (index + 1) as u32,
-                        2,
-                        cves.join("\n").as_str(),
-                        Some(&format2),
-                    )
-                    .unwrap();
-                sheet1
-                    .write_number((index + 1) as u32, 3, cves.len() as f64, Some(&format2))
-                    .unwrap();
+
+                let merge_end_row = (global_index - 1) as u32;
+                if merge_end_row > merge_start_row {
+                    sheet1
+                        .merge_range(merge_start_row, 0, merge_end_row, 0, k, Some(&format2))
+                        .unwrap();
+
+                    sheet1
+                        .merge_range(
+                            merge_start_row,
+                            3,
+                            merge_end_row,
+                            3,
+                            &merge_cve_num.to_string(),
+                            Some(&format2),
+                        )
+                        .unwrap();
+                }
             }
         }
     }
@@ -410,7 +438,7 @@ fn parse_component_cves(
     }
 }
 
-fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook) {
+fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook, detail: bool) {
     if !cve_map.is_empty() {
         let format1 = out
             .add_format()
@@ -447,6 +475,10 @@ fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook) {
                 sheet1
                     .write_url((index + 1) as u32, 1, v, Some(&format2))
                     .unwrap();
+                if !detail {
+                    // need parser CVE detail info
+                    continue;
+                }
                 let ret = CVE_API.lock().unwrap().invoke("AliyunApi", k);
                 // println!("{:#?}", ret.to_json());
                 sheet1
