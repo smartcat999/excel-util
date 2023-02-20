@@ -122,7 +122,10 @@ fn write_object_output(
             .add_format()
             .set_align(FormatAlignment::Center)
             .set_bg_color(FormatColor::Red);
-        let format2 = out.add_format().set_align(FormatAlignment::Left);
+        let format2 = out
+            .add_format()
+            .set_align(FormatAlignment::Center)
+            .set_align(FormatAlignment::VerticalCenter);
         let mut sheet1 = out.add_worksheet(Some("image")).unwrap();
         sheet1.write_string(0, 0, "image", Some(&format1)).unwrap();
         sheet1
@@ -318,7 +321,10 @@ fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mu
             .add_format()
             .set_align(FormatAlignment::Center)
             .set_bg_color(FormatColor::Red);
-        let format2 = out.add_format().set_align(FormatAlignment::Left);
+        let format2 = out
+            .add_format()
+            .set_align(FormatAlignment::Center)
+            .set_align(FormatAlignment::VerticalCenter);
         let mut sheet1 = out.add_worksheet(Some("component")).unwrap();
         sheet1
             .write_string(0, 0, "component", Some(&format1))
@@ -444,7 +450,10 @@ fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook, detai
             .add_format()
             .set_align(FormatAlignment::Center)
             .set_bg_color(FormatColor::Red);
-        let format2 = out.add_format().set_align(FormatAlignment::Left);
+        let format2 = out
+            .add_format()
+            .set_align(FormatAlignment::Center)
+            .set_align(FormatAlignment::VerticalCenter);
         let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
         sheet1.write_string(0, 0, "cve", Some(&format1)).unwrap();
         sheet1.write_string(0, 1, "link", Some(&format1)).unwrap();
