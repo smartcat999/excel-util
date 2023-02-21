@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs, path::Path, sync::Mutex};
 
 use clap::{value_parser, App, Arg, ArgAction, ArgMatches, Command};
 use office::{DataType, Excel};
-use xlsxwriter::{FormatAlignment, FormatColor, Workbook};
+use xlsxwriter::{Format, FormatAlignment, FormatColor, Workbook};
 
 pub mod api;
 pub mod lib;
@@ -14,6 +14,9 @@ const COLUMN_FILED_VERSION: &str = "Version";
 const COLUMN_FILED_OBJECT: &str = "Object full path";
 const COLUMN_FILED_VUL_COUNT: &str = "Vulnerability count";
 const COLUMN_FILED_CVE: &str = "CVE";
+const COLUMN_FILED_BINARY_OBJECT: &str = "Object";
+
+const TITLE_FONT_SIZE: f64 = 16.0;
 
 lazy_static! {
     pub static ref CVE_API: Mutex<CveApis> = {
@@ -86,7 +89,7 @@ pub fn handler(matches: &ArgMatches) {
     let output = format!("{}/{}", path, output);
     let mut out = Workbook::new(output.as_str());
 
-    let mut object_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut object_map: HashMap<String, HashMap<String, Vec<CveComponent>>> = HashMap::new();
     let mut component_map: HashMap<String, Vec<String>> = HashMap::new();
     let mut cve_map: HashMap<String, String> = HashMap::new();
 
@@ -112,93 +115,170 @@ pub fn handler(matches: &ArgMatches) {
     println!("inuput: {:#?}\noutput: {:#?}", files, output);
 }
 
+// format init
+fn set_title_format(out: &Workbook) -> Format {
+    out.add_format()
+        .set_align(FormatAlignment::Center)
+        .set_bg_color(FormatColor::Yellow)
+        .set_font_size(TITLE_FONT_SIZE)
+}
+
+fn set_content_format(out: &Workbook) -> Format {
+    out.add_format()
+        .set_align(FormatAlignment::Center)
+        .set_align(FormatAlignment::VerticalCenter)
+}
+
+#[derive(Debug)]
+struct CveComponent {
+    component: String,
+    binary: String,
+    cve: usize,
+}
+
+impl CveComponent {
+    fn new(component: String, binary: String, cve: usize) -> CveComponent {
+        CveComponent {
+            component,
+            binary,
+            cve,
+        }
+    }
+
+    fn id(&self) -> String {
+        self.component.clone()
+    }
+}
+
 fn write_object_output(
-    object_map: &HashMap<String, Vec<String>>,
+    object_map: &HashMap<String, HashMap<String, Vec<CveComponent>>>,
     component_map: &HashMap<String, Vec<String>>,
     out: &mut Workbook,
 ) {
     if !object_map.is_empty() {
-        let format1 = out
-            .add_format()
-            .set_align(FormatAlignment::Center)
-            .set_bg_color(FormatColor::Red);
-        let format2 = out
-            .add_format()
-            .set_align(FormatAlignment::Center)
-            .set_align(FormatAlignment::VerticalCenter);
+        let format1 = set_title_format(out);
+        let format2 = set_content_format(out);
         let mut sheet1 = out.add_worksheet(Some("image")).unwrap();
         sheet1.write_string(0, 0, "image", Some(&format1)).unwrap();
+
         sheet1
-            .write_string(0, 1, "dependencies", Some(&format1))
+            .write_string(0, 1, "image_cve", Some(&format1))
             .unwrap();
-        sheet1.write_string(0, 2, "cves", Some(&format1)).unwrap();
-        sheet1.write_string(0, 3, "num", Some(&format1)).unwrap();
+        sheet1
+            .write_string(0, 2, "component", Some(&format1))
+            .unwrap();
+        sheet1
+            .write_string(0, 3, "component_cve", Some(&format1))
+            .unwrap();
+
+        sheet1.write_string(0, 4, "object", Some(&format1)).unwrap();
 
         let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
         object_keys.sort();
-        // println!("object: {:#?}", object_keys);
+
         let mut global_index: usize = 1;
         for (_, k) in object_keys.iter().enumerate() {
-            // println!("{:#?}: \n{:#?}", k, v);
+            let image_merge_start = global_index as u32;
+            let mut image_merge_end = image_merge_start - 1;
+            let mut image_cve: usize = 0;
             if let Some(v) = object_map.get(k) {
-                let merge_start_row = global_index as u32;
-                let mut merge_cve_num: u32 = 0;
-                for v in v.iter() {
-                    sheet1
-                        .write_string(global_index as u32, 0, k, Some(&format2))
-                        .unwrap();
-                    sheet1
-                        .write_string(global_index as u32, 1, v.as_str(), Some(&format2))
-                        .unwrap();
-                    let comp_key: Vec<&str> = v.split(":  ").collect();
-                    let comp_key = comp_key[0];
-                    let mut cves: Vec<String> = Vec::new();
-                    if let Some(cve) = component_map.get(comp_key) {
-                        cves.extend_from_slice(cve);
+                for (comp_id, comps) in v.iter() {
+                    let comp_merge_start = global_index as u32;
+                    let mut comp_merge_end = comp_merge_start - 1;
+                    let mut comp_cve = 0;
+                    for comp in comps.iter() {
                         sheet1
-                            .write_string(
-                                global_index as u32,
+                            .write_string(global_index as u32, 0, k, Some(&format2))
+                            .unwrap();
+                        sheet1
+                            .write_string(global_index as u32, 2, &comp.id(), Some(&format2))
+                            .unwrap();
+                        if component_map.contains_key(&comp.id()) {
+                            sheet1
+                                .write_string(global_index as u32, 4, &comp.binary, Some(&format2))
+                                .unwrap();
+                            sheet1
+                                .write_number(
+                                    global_index as u32,
+                                    3,
+                                    comp.cve as f64,
+                                    Some(&format2),
+                                )
+                                .unwrap();
+                        }
+                        comp_cve = comp.cve;
+                        global_index += 1;
+                        image_merge_end += 1;
+                        comp_merge_end += 1;
+                    }
+                    image_cve += comp_cve;
+                    if comp_merge_end > comp_merge_start {
+                        sheet1
+                            .merge_range(
+                                comp_merge_start,
                                 2,
-                                cves.join("\n").as_str(),
+                                comp_merge_end,
+                                2,
+                                comp_id,
                                 Some(&format2),
                             )
                             .unwrap();
+
                         sheet1
-                            .write_number(global_index as u32, 3, cves.len() as f64, Some(&format2))
+                            .merge_range(
+                                comp_merge_start,
+                                3,
+                                comp_merge_end,
+                                3,
+                                &comp_cve.to_string(),
+                                Some(&format2),
+                            )
                             .unwrap();
-                        merge_cve_num += cves.len() as u32;
+
+                        sheet1
+                            .write_number(
+                                comp_merge_start as u32,
+                                3,
+                                comp_cve as f64,
+                                Some(&format2),
+                            )
+                            .unwrap();
                     }
-                    global_index += 1;
                 }
 
-                let merge_end_row = (global_index - 1) as u32;
-                if merge_end_row > merge_start_row {
+                if image_merge_end > image_merge_start {
                     sheet1
-                        .merge_range(merge_start_row, 0, merge_end_row, 0, k, Some(&format2))
+                        .merge_range(image_merge_start, 0, image_merge_end, 0, k, Some(&format2))
                         .unwrap();
 
                     sheet1
-                        .merge_range(
-                            merge_start_row,
-                            3,
-                            merge_end_row,
-                            3,
-                            &merge_cve_num.to_string(),
-                            Some(&format2),
-                        )
+                        .merge_range(image_merge_start, 1, image_merge_end, 1, &image_cve.to_string(), Some(&format2))
                         .unwrap();
                 }
+                sheet1
+                    .write_number(
+                        image_merge_start as u32,
+                        1,
+                        image_cve as f64,
+                        Some(&format2),
+                    )
+                    .unwrap();
             }
         }
     }
 }
 
-fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<String, Vec<String>>) {
+fn parse_object(
+    workbook: &mut Excel,
+    sheet: &str,
+    object_map: &mut HashMap<String, HashMap<String, Vec<CveComponent>>>,
+) {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
     let mut version_index: usize = 0;
     let mut object_index: usize = 0;
     let mut vulnerability_index: usize = 0;
+    let mut binary_object_index: usize = 0;
 
     for (index, vals) in range.rows().enumerate() {
         if index == 0 {
@@ -212,6 +292,8 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
                         object_index = header_idx;
                     } else if val == COLUMN_FILED_VUL_COUNT {
                         vulnerability_index = header_idx;
+                    } else if val == COLUMN_FILED_BINARY_OBJECT {
+                        binary_object_index = header_idx;
                     }
                 }
             }
@@ -222,9 +304,13 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
             if component_index == version_index
                 || component_index == object_index
                 || component_index == vulnerability_index
+                || component_index == binary_object_index
                 || version_index == object_index
                 || version_index == vulnerability_index
+                || version_index == binary_object_index
                 || object_index == vulnerability_index
+                || object_index == binary_object_index
+                || vulnerability_index == binary_object_index
             {
                 break;
             }
@@ -269,7 +355,23 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
                 },
                 None => "",
             };
-            let object = match vals.get(object_index) {
+            let binary_object = match vals.get(binary_object_index) {
+                Some(v) => match v {
+                    DataType::String(v) => v,
+                    DataType::Int(_)
+                    | DataType::Float(_)
+                    | DataType::Bool(_)
+                    | DataType::Error(_)
+                    | DataType::Empty => "",
+                },
+                None => "",
+            };
+            let cve_component = CveComponent::new(
+                format!("{}{}", component, version),
+                binary_object.to_string(),
+                vulnerability,
+            );
+            let object_val = match vals.get(object_index) {
                 Some(v) => {
                     let v = match v {
                         DataType::String(v) => {
@@ -278,6 +380,11 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
                             for &sec in secs.iter() {
                                 if sec.contains("dockerhub.kubekey.local#") {
                                     object_key = sec.to_string();
+                                }
+                            }
+                            if object_key.is_empty() {
+                                if let Some(k) = secs.last() {
+                                    object_key = k.to_string();
                                 }
                             }
                             object_key
@@ -292,23 +399,33 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
                 }
                 None => String::from(""),
             };
-            let mut object: Vec<&str> = object.split('#').collect();
+
+            let mut object: Vec<&str>;
+            if object_val.contains('#') {
+                object = object_val.split('#').collect();
+            } else {
+                object = object_val.split(' ').collect();
+            }
+
             if let Some(object) = object.pop() {
                 let object = object.trim_end_matches(".tar_");
                 // println!(
-                //     "object:{:#?}\ncomponent:{:#?}\nversion:{:#?}\nvulnerability:{}",
-                //     object, component, version, vulnerability
+                //     "object:{:#?}\ncomponent:{:#?}\nversion:{:#?}\nvulnerability:{}\ncve_component:{:#?}",
+                //     object, component, version, vulnerability, cve_component
                 // );
                 if object.is_empty() || component.is_empty() || version.is_empty() {
                     continue;
                 }
-                let component = format!("{}{}:  {}", component, version, vulnerability);
                 if let Some(components) = object_map.get_mut(object) {
-                    if !components.contains(&component) {
-                        components.push(component);
+                    if let Some(binarys) = components.get_mut(&cve_component.id()) {
+                        binarys.push(cve_component);
+                    } else {
+                        components.insert(cve_component.id(), vec![cve_component]);
                     }
                 } else {
-                    object_map.insert(object.to_string(), vec![component]);
+                    let mut comps: HashMap<String, Vec<CveComponent>> = HashMap::new();
+                    comps.insert(cve_component.id(), vec![cve_component]);
+                    object_map.insert(object.to_string(), comps);
                 }
             }
         }
@@ -317,14 +434,8 @@ fn parse_object(workbook: &mut Excel, sheet: &str, object_map: &mut HashMap<Stri
 
 fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mut Workbook) {
     if !component_map.is_empty() {
-        let format1 = out
-            .add_format()
-            .set_align(FormatAlignment::Center)
-            .set_bg_color(FormatColor::Red);
-        let format2 = out
-            .add_format()
-            .set_align(FormatAlignment::Center)
-            .set_align(FormatAlignment::VerticalCenter);
+        let format1 = set_title_format(out);
+        let format2 = set_content_format(out);
         let mut sheet1 = out.add_worksheet(Some("component")).unwrap();
         sheet1
             .write_string(0, 0, "component", Some(&format1))
@@ -446,14 +557,8 @@ fn parse_component_cves(
 
 fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook, detail: bool) {
     if !cve_map.is_empty() {
-        let format1 = out
-            .add_format()
-            .set_align(FormatAlignment::Center)
-            .set_bg_color(FormatColor::Red);
-        let format2 = out
-            .add_format()
-            .set_align(FormatAlignment::Center)
-            .set_align(FormatAlignment::VerticalCenter);
+        let format1 = set_title_format(out);
+        let format2 = set_content_format(out);
         let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
         sheet1.write_string(0, 0, "cve", Some(&format1)).unwrap();
         sheet1.write_string(0, 1, "link", Some(&format1)).unwrap();
