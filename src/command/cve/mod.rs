@@ -170,8 +170,9 @@ fn write_object_output(
         sheet1
             .write_string(0, 3, "component_cve", Some(&format1))
             .unwrap();
+        sheet1.write_string(0, 4, "cve", Some(&format1)).unwrap();
 
-        sheet1.write_string(0, 4, "object", Some(&format1)).unwrap();
+        sheet1.write_string(0, 5, "object", Some(&format1)).unwrap();
 
         let mut object_keys: Vec<String> = object_map.keys().map(|x| x.to_string()).collect();
         object_keys.sort();
@@ -195,7 +196,7 @@ fn write_object_output(
                             .unwrap();
                         if component_map.contains_key(&comp.id()) {
                             sheet1
-                                .write_string(global_index as u32, 4, &comp.binary, Some(&format2))
+                                .write_string(global_index as u32, 5, &comp.binary, Some(&format2))
                                 .unwrap();
                             sheet1
                                 .write_number(
@@ -205,6 +206,16 @@ fn write_object_output(
                                     Some(&format2),
                                 )
                                 .unwrap();
+                            if let Some(comp_cve) = component_map.get(&comp.id()) {
+                                sheet1
+                                    .write_string(
+                                        global_index as u32,
+                                        4,
+                                        comp_cve.join("\n").as_str(),
+                                        Some(&format2),
+                                    )
+                                    .unwrap();
+                            }
                         }
                         comp_cve = comp.cve;
                         global_index += 1;
@@ -252,7 +263,14 @@ fn write_object_output(
                         .unwrap();
 
                     sheet1
-                        .merge_range(image_merge_start, 1, image_merge_end, 1, &image_cve.to_string(), Some(&format2))
+                        .merge_range(
+                            image_merge_start,
+                            1,
+                            image_merge_end,
+                            1,
+                            &image_cve.to_string(),
+                            Some(&format2),
+                        )
                         .unwrap();
                 }
                 sheet1
