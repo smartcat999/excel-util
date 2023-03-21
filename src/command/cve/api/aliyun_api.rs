@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_cve_parser() {
-        let cve_api = AliyunApi::new();
-        // cve_api.parser_html(include_str!("cve.html"));
+        let _cve_api = AliyunApi::new();
+        //cve_api.parser_html(include_str!("cve.html"));
     }
 }

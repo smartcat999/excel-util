@@ -298,6 +298,8 @@ fn parse_object(
     let mut vulnerability_index: usize = 0;
     let mut binary_object_index: usize = 0;
 
+    let object_flags = vec!["dockerhub.kubekey.local", "docker.io"];
+
     for (index, vals) in range.rows().enumerate() {
         if index == 0 {
             for (header_idx, header_content) in vals.iter().enumerate() {
@@ -316,8 +318,8 @@ fn parse_object(
                 }
             }
             // println!(
-            //     "object_index:{:#?} component_index:{:#?} version_index:{:#?} vulnerability_index:{:#?}",
-            //     object_index, component_index, version_index, vulnerability_index
+            //     "object_index:{:#?} component_index:{:#?} version_index:{:#?} vulnerability_index:{:#?} binary_object_index:{:#?}",
+            //     object_index, component_index, version_index, vulnerability_index, binary_object_index
             // );
             if component_index == version_index
                 || component_index == object_index
@@ -396,8 +398,10 @@ fn parse_object(
                             let mut object_key: String = String::new();
                             let secs: Vec<&str> = v.split('/').collect();
                             for &sec in secs.iter() {
-                                if sec.contains("dockerhub.kubekey.local#") {
-                                    object_key = sec.to_string();
+                                for flag in object_flags.iter() {
+                                    if sec.contains(*flag) {
+                                        object_key = sec.to_string();
+                                    }
                                 }
                             }
                             if object_key.is_empty() {
