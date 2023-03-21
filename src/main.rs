@@ -13,6 +13,7 @@ fn main() {
         .subcommands(vec![
             command::stu::new_sub_command(),
             command::cve::new_sub_command(),
+            command::image::new_sub_command(),
         ])
         .override_usage("etool <command>\n  ");
     let matches = args.clone().get_matches();
@@ -22,6 +23,9 @@ fn main() {
         }
         Some(("cve", matches)) => {
             command::cve::handler(matches);
+        }
+        Some(("image", matches)) => {
+            command::image::handler(matches);
         }
         _ => {
             match args.print_help() {
