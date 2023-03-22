@@ -20,7 +20,7 @@ impl InspectCmd {
 impl Cmd for InspectCmd {
     fn cmd(&self) -> String {
         format!(
-            "skopeo inspect docker://{} --insecure-policy --tls-verify=false -f \"{{.Layers}}\"",
+            r#"skopeo inspect docker://{} --insecure-policy --tls-verify=false -f "{{{{.Layers}}}}""#,
             self.cmd
         )
     }
