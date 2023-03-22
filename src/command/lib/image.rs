@@ -26,8 +26,7 @@ impl Cmd for InspectCmd {
     }
 
     fn handler(&self, s: &str) {
-        let x: &[_] = &['[', ']'];
-        let s = s.trim_matches(x);
+        let s = s.trim_matches(|c| c == '[' || c == ']' || c == ' ');
         println!("s: {}", s);
     }
 }
