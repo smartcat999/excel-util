@@ -12,3 +12,4 @@ Cargo.lock
 tmp/*
 *.xlsx
 image.txt
+.idea
