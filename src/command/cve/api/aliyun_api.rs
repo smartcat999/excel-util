@@ -6,6 +6,8 @@ use serde::{self, Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 
+pub const ALI_YUN_CVE_API: &str = "AliyunApi";
+
 pub struct AliyunApi {
     http_client: HttpClient,
 }
@@ -93,7 +95,7 @@ impl CveApi for AliyunApi {
         Box::new(cve)
     }
     fn id(&self) -> String {
-        String::from("AliyunApi")
+        String::from(ALI_YUN_CVE_API)
     }
 }
 

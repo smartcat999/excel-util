@@ -131,14 +131,35 @@ fn read_inspect_cmd_from_file<P: AsRef<Path>>(
     Ok(u)
 }
 
-pub fn load(files: Vec<&str>) -> HashMap<String, InspectCmd> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImageIndex {
+    inspect_cmds: HashMap<String, InspectCmd>
+}
+
+impl ImageIndex {
+    pub fn new(inspect_cmds: HashMap<String, InspectCmd>) -> ImageIndex {
+        ImageIndex { inspect_cmds }
+    }
+
+    pub fn search_layers(&self, layer: String) -> Vec<String>{
+        let mut result: Vec<String> = Vec::new();
+        for (k, v) in self.inspect_cmds.iter() {
+            if v.layers.contains(&layer) {
+                result.push(k.clone());
+            }
+        }
+        result
+    }
+}
+
+pub fn load(files: Vec<&str>) -> ImageIndex {
     let mut image_layer: HashMap<String, InspectCmd> = HashMap::new();
     let target: Vec<&str> = if files.is_empty() {
-        vec!["image.txt"]
+        vec!["./image.json"]
     } else {
         files
     };
-
+    println!("load files: {:#?}", target);
     for file in target {
         let f = file.trim();
         if !f.is_empty() {
@@ -150,16 +171,18 @@ pub fn load(files: Vec<&str>) -> HashMap<String, InspectCmd> {
                     }
                 },
                 Err(e) => {
-                    println!("{:#?}", e);
+                    println!("read_inspect_cmd error: {:#?}", e);
                 }
             }
         }
     }
-    image_layer
+    ImageIndex::new(image_layer)
 }
 
 #[cfg(test)]
 mod test {
+    use std::vec;
+
     #[allow(unused_imports)]
     use super::*;
 
@@ -189,5 +212,12 @@ mod test {
     #[test]
     fn test_multi_run_inspect_cmd() {
         multi_run_inspect_cmd(vec![]);
+    }
+
+    #[test]
+    fn test_load_image() {
+        let index = load(vec!["./tmp/image.json"]);
+        let result = index.search_layers(String::from("sha256:b3c136eddcbf2003d3180787cef00f39d46b9fd9e4623178282ad6a8d63ad3b0"));
+        println!("result: {:#?}", result);
     }
 }

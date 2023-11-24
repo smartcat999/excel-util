@@ -1,13 +1,17 @@
-use std::{collections::HashMap, fs, path::Path, sync::Mutex};
+use std::{collections::HashMap, fs, path::Path, sync::Mutex, vec};
 
 use clap::{value_parser, App, Arg, ArgAction, ArgMatches, Command};
 use office::{DataType, Excel};
-use xlsxwriter::{Format, FormatAlignment, FormatColor, Workbook};
+use xlsxwriter::{format::*, Workbook};
 
 pub mod api;
 pub mod lib;
 
 use lib::CveApis;
+
+use crate::command::lib::image;
+
+use super::lib::image::ImageIndex;
 
 const COLUMN_FILED_COMPONENT: &str = "Component";
 const COLUMN_FILED_VERSION: &str = "Version";
@@ -67,7 +71,13 @@ pub fn new_sub_command<'help>() -> App<'help> {
                 .action(clap::ArgAction::SetTrue)
                 .help("是否输出CVE详细信息"),
         )
-        .override_usage("etool cve -p ./tmp -f Open_Source_Binary_Result.xlsx --sheet 组件报告 --sheet_ext 漏洞报告 --detail -o cve.xlsx\n  ")
+        .arg(
+            Arg::new("release")
+                .long("release")
+                .action(clap::ArgAction::SetTrue)
+                .help("是否解析release包"),
+        )
+        .override_usage("etool cve -p ./tmp -f Open_Source_Binary_Result.xlsx --sheet 组件报告 --sheet_ext 漏洞报告 --detail --release -o cve.xlsx\n  ")
 }
 
 pub fn handler(matches: &ArgMatches) {
@@ -79,6 +89,7 @@ pub fn handler(matches: &ArgMatches) {
     let sheet = matches.get_one::<String>("sheet").unwrap();
     let sheet_ext = matches.get_one::<String>("sheet_ext").unwrap();
     let detail = matches.get_flag("detail");
+    let release = matches.get_flag("release");
     let output = matches.get_one::<String>("output").unwrap();
 
     if !Path::exists(Path::new(path)) {
@@ -87,11 +98,21 @@ pub fn handler(matches: &ArgMatches) {
 
     // output
     let output = format!("{}/{}", path, output);
-    let mut out = Workbook::new(output.as_str());
+    let mut out = match Workbook::new(output.as_str()) {
+        Ok(v) => v,
+        Err(e) => {
+            panic!("{}", e)
+        }
+    };
 
     let mut object_map: HashMap<String, HashMap<String, Vec<CveComponent>>> = HashMap::new();
     let mut component_map: HashMap<String, Vec<String>> = HashMap::new();
     let mut cve_map: HashMap<String, String> = HashMap::new();
+    let mut image_index: ImageIndex = image::ImageIndex::new(HashMap::new());
+
+    if release {
+        image_index = image::load(vec!["./tmp/image.json"]);
+    }
 
     for file in files.iter() {
         let mut workbook = Excel::open(file).unwrap();
@@ -100,7 +121,7 @@ pub fn handler(matches: &ArgMatches) {
         parse_component_cves(&mut workbook, sheet_ext, &mut component_map, &mut cve_map);
 
         // parse object's component
-        parse_object(&mut workbook, sheet, &mut object_map);
+        parse_object(&mut workbook, sheet, &mut object_map, release, &image_index);
     }
 
     write_component_output(&component_map, &mut out);
@@ -116,17 +137,19 @@ pub fn handler(matches: &ArgMatches) {
 }
 
 // format init
-fn set_title_format(out: &Workbook) -> Format {
-    out.add_format()
-        .set_align(FormatAlignment::Center)
+fn set_title_format() -> Format {
+    let mut format = Format::new();
+    format.set_align(FormatAlignment::Center)
         .set_bg_color(FormatColor::Yellow)
-        .set_font_size(TITLE_FONT_SIZE)
+        .set_font_size(TITLE_FONT_SIZE);
+    format
 }
 
-fn set_content_format(out: &Workbook) -> Format {
-    out.add_format()
-        .set_align(FormatAlignment::Center)
-        .set_align(FormatAlignment::VerticalCenter)
+fn set_content_format() -> Format {
+    let mut format = Format::new();
+    format.set_align(FormatAlignment::Center)
+        .set_vertical_align(FormatVerticalAlignment::VerticalCenter);
+    format
 }
 
 #[derive(Debug)]
@@ -150,14 +173,24 @@ impl CveComponent {
     }
 }
 
+impl Clone for CveComponent {
+    fn clone(&self) -> CveComponent {
+        CveComponent{
+            component: self.component.clone(),
+            binary: self.binary.clone(),
+            cve: self.cve,
+        }
+    }
+}
+
 fn write_object_output(
     object_map: &HashMap<String, HashMap<String, Vec<CveComponent>>>,
     component_map: &HashMap<String, Vec<String>>,
     out: &mut Workbook,
 ) {
     if !object_map.is_empty() {
-        let format1 = set_title_format(out);
-        let format2 = set_content_format(out);
+        let format1 = set_title_format();
+        let format2 = set_content_format();
         let mut sheet1 = out.add_worksheet(Some("image")).unwrap();
         sheet1.write_string(0, 0, "image", Some(&format1)).unwrap();
 
@@ -290,6 +323,8 @@ fn parse_object(
     workbook: &mut Excel,
     sheet: &str,
     object_map: &mut HashMap<String, HashMap<String, Vec<CveComponent>>>,
+    release: bool,
+    image_index: &ImageIndex,
 ) {
     let range = workbook.worksheet_range(sheet).unwrap();
     let mut component_index: usize = 0;
@@ -298,7 +333,8 @@ fn parse_object(
     let mut vulnerability_index: usize = 0;
     let mut binary_object_index: usize = 0;
 
-    let object_flags = vec!["dockerhub.kubekey.local", "docker.io"];
+    let scan_object_flags = vec!["dockerhub.kubekey.local", "docker.io"];
+    let release_object_flags = vec!["blobs"];
 
     for (index, vals) in range.rows().enumerate() {
         if index == 0 {
@@ -397,17 +433,33 @@ fn parse_object(
                         DataType::String(v) => {
                             let mut object_key: String = String::new();
                             let secs: Vec<&str> = v.split('/').collect();
-                            for &sec in secs.iter() {
+                            let object_flags: Vec<&str> = if release {
+                                release_object_flags.clone()
+                            } else {
+                                scan_object_flags.clone()
+                            };
+
+                            for (index, &sec) in secs.iter().enumerate() {
                                 for flag in object_flags.iter() {
                                     if sec.contains(*flag) {
-                                        object_key = sec.to_string();
+                                        object_key = if release {
+                                            String::from("sha256:")
+                                                + secs[index + 2].to_string().trim_matches('_')
+                                        } else {
+                                            sec.to_string()
+                                        };
+                                        break;
+                                    } else if !release && sec.contains("images") {
+                                        object_key = secs[index + 1].to_string();
+                                        break;
                                     }
                                 }
                             }
                             if object_key.is_empty() {
-                                if let Some(k) = secs.last() {
-                                    object_key = k.to_string();
-                                }
+                                // if let Some(k) = secs.last() {
+                                //     object_key = k.to_string();
+                                // }
+                                object_key = v.to_string()
                             }
                             object_key
                         }
@@ -422,42 +474,63 @@ fn parse_object(
                 None => String::from(""),
             };
 
-            let mut object: Vec<&str>;
+            let mut object_bytes: Vec<&str>;
+            let mut object_key: &str = "";
             if object_val.contains('#') {
-                object = object_val.split('#').collect();
+                object_bytes = object_val.split('#').collect();
+                if let Some(object) = object_bytes.pop() {
+                    object_key = object.trim_end_matches(".tar_");
+                }
+            } else if object_val.starts_with("sha256:") {
+                object_key = object_val.as_str();
             } else {
-                object = object_val.split(' ').collect();
+                object_bytes = object_val.split(' ').collect();
+                if let Some(object) = object_bytes.pop() {
+                    object_key = object.trim_end_matches(".tar_");
+                }
             }
 
-            if let Some(object) = object.pop() {
-                let object = object.trim_end_matches(".tar_");
-                // println!(
-                //     "object:{:#?}\ncomponent:{:#?}\nversion:{:#?}\nvulnerability:{}\ncve_component:{:#?}",
-                //     object, component, version, vulnerability, cve_component
-                // );
-                if object.is_empty() || component.is_empty() || version.is_empty() {
-                    continue;
-                }
-                if let Some(components) = object_map.get_mut(object) {
-                    if let Some(binarys) = components.get_mut(&cve_component.id()) {
-                        binarys.push(cve_component);
-                    } else {
-                        components.insert(cve_component.id(), vec![cve_component]);
-                    }
-                } else {
-                    let mut comps: HashMap<String, Vec<CveComponent>> = HashMap::new();
-                    comps.insert(cve_component.id(), vec![cve_component]);
-                    object_map.insert(object.to_string(), comps);
-                }
+            println!(
+                "object:{:#?}\ncomponent:{:#?}\nversion:{:#?}\nvulnerability:{}\ncve_component:{:#?}",
+                object_key, component, version, vulnerability, cve_component
+            );
+            if object_key.is_empty() || component.is_empty() || version.is_empty() {
+                continue;
             }
+            if object_key.starts_with("sha256:") {
+                let object_keys = image_index.search_layers(object_key.to_string());
+                println!("images: {:#?}", object_keys);
+                for (_, object_key) in object_keys.iter().enumerate() {
+                    update_object_cve_component(object_map, object_key, cve_component.clone())
+                }
+            } else {
+                update_object_cve_component(object_map, object_key, cve_component)
+            }
+
         }
+    }
+}
+
+fn update_object_cve_component(object_map: &mut HashMap<String, HashMap<String, Vec<CveComponent>>>,
+                               object_key: &str,
+                               cve_component: CveComponent) {
+    if let Some(components) = object_map.get_mut(object_key) {
+        if let Some(binarys) = components.get_mut(&cve_component.id()) {
+            binarys.push(cve_component);
+        } else {
+            components.insert(cve_component.id(), vec![cve_component]);
+        }
+    } else {
+        let mut comps: HashMap<String, Vec<CveComponent>> = HashMap::new();
+        comps.insert(cve_component.id(), vec![cve_component]);
+        object_map.insert(object_key.to_string(), comps);
     }
 }
 
 fn write_component_output(component_map: &HashMap<String, Vec<String>>, out: &mut Workbook) {
     if !component_map.is_empty() {
-        let format1 = set_title_format(out);
-        let format2 = set_content_format(out);
+        let format1 = set_title_format();
+        let format2 = set_content_format();
         let mut sheet1 = out.add_worksheet(Some("component")).unwrap();
         sheet1
             .write_string(0, 0, "component", Some(&format1))
@@ -579,8 +652,8 @@ fn parse_component_cves(
 
 fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook, detail: bool) {
     if !cve_map.is_empty() {
-        let format1 = set_title_format(out);
-        let format2 = set_content_format(out);
+        let format1 = set_title_format();
+        let format2 = set_content_format();
         let mut sheet1 = out.add_worksheet(Some("cve")).unwrap();
         sheet1.write_string(0, 0, "cve", Some(&format1)).unwrap();
         sheet1.write_string(0, 1, "link", Some(&format1)).unwrap();
@@ -615,7 +688,7 @@ fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook, detai
                     // need parser CVE detail info
                     continue;
                 }
-                let ret = CVE_API.lock().unwrap().invoke("AliyunApi", k);
+                let ret = CVE_API.lock().unwrap().invoke(api::aliyun_api::ALI_YUN_CVE_API, k);
                 // println!("{:#?}", ret.to_json());
                 sheet1
                     .write_string((index + 1) as u32, 2, &ret.get("title"), Some(&format2))
