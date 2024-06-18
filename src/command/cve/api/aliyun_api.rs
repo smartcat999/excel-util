@@ -1,6 +1,8 @@
+use std::fmt::format;
 use crate::command::cve::api::base::HttpClient;
 use crate::command::cve::lib::{Cve, CveApi};
 use select::document::Document;
+use select::node::Node;
 use select::predicate::{Class, Name, Predicate};
 use serde::{self, Deserialize, Serialize};
 use std::fs;
@@ -40,10 +42,10 @@ impl AliyunApi {
             cve.publish = self.trim_node(node.text());
         }
         for node in document
-            .find(Class("text-detail").descendant(Name("div")))
-            .take(1)
+            .find(Class("text-detail").child(Name("div")))
+            .collect::<Vec<Node>>()
         {
-            cve.description = self.trim_node(node.text());
+            cve.description += &format!("{}\n", self.trim_node(node.text()));
         }
         for node in document.find(Class("text-detail").and(Name("div"))).take(2) {
             cve.suggestion = self.trim_node(node.text());
@@ -154,7 +156,7 @@ mod tests {
     #[test]
     fn test_cve_api() {
         let cve_api = AliyunApi::new();
-        cve_api.query("CVE-2004-2771");
+        cve_api.query("CVE-2023-25194");
     }
 
     #[test]

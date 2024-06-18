@@ -7,13 +7,16 @@ use clap::App;
 extern crate lazy_static;
 
 fn main() {
+    let stu_command =command::stu::new_sub_command();
+    let mut cve_command = command::cve::new_sub_command();
+    let image_command =  command::image::new_sub_command();
     let mut args = App::new("Excel工具")
         .version("v1.0")
         .author("smartcat")
         .subcommands(vec![
-            command::stu::new_sub_command(),
-            command::cve::new_sub_command(),
-            command::image::new_sub_command(),
+            stu_command,
+            cve_command.clone(),
+            image_command,
         ])
         .override_usage("etool <command>\n  ");
     let matches = args.clone().get_matches();
@@ -22,18 +25,25 @@ fn main() {
             command::stu::handler(matches);
         }
         Some(("cve", matches)) => {
-            command::cve::handler(matches);
+            match matches.subcommand() {
+                Some(("analyze", matches)) => {
+                    command::cve::analyze::handler(matches);
+                }
+                Some(("export", matches)) => {
+                    command::cve::exporter::handler(matches);
+                }
+                _ => cve_command.print_help().unwrap_or_else(|err| {
+                    println!("{:#?}", err);
+                })
+            }
         }
         Some(("image", matches)) => {
             command::image::handler(matches);
         }
         _ => {
-            match args.print_help() {
-                Ok(ret) => ret,
-                Err(err) => {
-                    println!("{:#?}", err);
-                }
-            };
+            args.print_help().unwrap_or_else(|err| {
+                println!("{:#?}", err);
+            });
         }
     };
 }

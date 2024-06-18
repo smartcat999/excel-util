@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use clap::{App, Arg, ArgMatches, Command};
-use office::{DataType, Excel};
+use calamine::{open_workbook, DataType, Xlsx, Reader};
 
 pub fn new_sub_command<'help>() -> App<'help> {
     Command::new("student")
@@ -53,7 +53,7 @@ pub fn handler(matches: &ArgMatches) {
     if !Path::exists(Path::new(path)) {
         fs::create_dir(path).unwrap();
     };
-    let mut workbook = Excel::open(file).unwrap();
+    let mut workbook: Xlsx<_> = open_workbook(file).unwrap();
     let range = workbook.worksheet_range(sheet).unwrap();
     for (index, vals) in range.rows().enumerate() {
         if index < row {
