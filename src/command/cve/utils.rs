@@ -156,39 +156,45 @@ pub async fn write_cve_output_async(cve_map: &HashMap<String, String>, out: &mut
                     // need parser CVE detail info
                     continue;
                 }
-                let ret = ALIYUN_CVE_API.lock().unwrap().query(k).await.unwrap();
-                // println!("{:#?}", ret.to_json());
-                sheet1
-                    .write_string((index + 1) as u32, 2, &ret.get("title"), Some(&format2))
-                    .unwrap();
-                sheet1
-                    .write_string((index + 1) as u32, 3, &ret.get("fix_label"), Some(&format2))
-                    .unwrap();
-                sheet1
-                    .write_string((index + 1) as u32, 4, &ret.get("publish"), Some(&format2))
-                    .unwrap();
-                sheet1
-                    .write_string(
-                        (index + 1) as u32,
-                        5,
-                        &ret.get("description"),
-                        Some(&format2),
-                    )
-                    .unwrap();
-                sheet1
-                    .write_string(
-                        (index + 1) as u32,
-                        6,
-                        &ret.get("suggestion"),
-                        Some(&format2),
-                    )
-                    .unwrap();
-                sheet1
-                    .write_string((index + 1) as u32, 7, &ret.get("score"), Some(&format2))
-                    .unwrap();
-                sheet1
-                    .write_string((index + 1) as u32, 8, &ret.get("effect"), Some(&format2))
-                    .unwrap();
+                let ret = ALIYUN_CVE_API.lock().unwrap().query(k).await;
+                match ret {
+                    Ok(ret) => {
+                        sheet1
+                            .write_string((index + 1) as u32, 2, &ret.get("title"), Some(&format2))
+                            .unwrap();
+                        sheet1
+                            .write_string((index + 1) as u32, 3, &ret.get("fix_label"), Some(&format2))
+                            .unwrap();
+                        sheet1
+                            .write_string((index + 1) as u32, 4, &ret.get("publish"), Some(&format2))
+                            .unwrap();
+                        sheet1
+                            .write_string(
+                                (index + 1) as u32,
+                                5,
+                                &ret.get("description"),
+                                Some(&format2),
+                            )
+                            .unwrap();
+                        sheet1
+                            .write_string(
+                                (index + 1) as u32,
+                                6,
+                                &ret.get("suggestion"),
+                                Some(&format2),
+                            )
+                            .unwrap();
+                        sheet1
+                            .write_string((index + 1) as u32, 7, &ret.get("score"), Some(&format2))
+                            .unwrap();
+                        sheet1
+                            .write_string((index + 1) as u32, 8, &ret.get("effect"), Some(&format2))
+                            .unwrap();
+                    },
+                    Err(e) => {
+                        println!("{}", e)
+                    }
+                }
             }
         }
     }
