@@ -4,6 +4,7 @@ use std::path::Path;
 use clap::ArgMatches;
 use xlsxwriter::Workbook;
 use crate::command::cve::utils;
+use tokio;
 
 
 pub fn handler(matches: &ArgMatches) {
@@ -38,12 +39,12 @@ pub fn handler(matches: &ArgMatches) {
     }
 
     let mut cve_map = HashMap::new();
-    for (index, id) in cve_ids.iter().enumerate() {
+    for (_index, id) in cve_ids.iter().enumerate() {
         cve_map.insert(
             id.clone(),
             format!("https://avd.aliyun.com/detail?id={}", id),
         );
     }
 
-    utils::write_cve_output(&cve_map, &mut out, detail);
+    tokio::runtime::Runtime::new().unwrap().block_on(utils::write_cve_output_async(&cve_map, &mut out, detail));
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use xlsxwriter::{Format, Workbook, Worksheet};
 use xlsxwriter::format::{FormatAlignment, FormatColor, FormatVerticalAlignment};
-use crate::command::cve::{api, CVE_API, TITLE_FONT_SIZE};
+use crate::command::cve::{api, CVE_API, ALIYUN_CVE_API, TITLE_FONT_SIZE};
 
 pub fn is_column_field_component(s: &str) -> bool {
     if s == "Component" || s == "组件名称" {
@@ -90,6 +90,73 @@ pub fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook, d
                     continue;
                 }
                 let ret = CVE_API.lock().unwrap().invoke(api::aliyun_api::ALI_YUN_CVE_API, k);
+                // println!("{:#?}", ret.to_json());
+                sheet1
+                    .write_string((index + 1) as u32, 2, &ret.get("title"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 3, &ret.get("fix_label"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 4, &ret.get("publish"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string(
+                        (index + 1) as u32,
+                        5,
+                        &ret.get("description"),
+                        Some(&format2),
+                    )
+                    .unwrap();
+                sheet1
+                    .write_string(
+                        (index + 1) as u32,
+                        6,
+                        &ret.get("suggestion"),
+                        Some(&format2),
+                    )
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 7, &ret.get("score"), Some(&format2))
+                    .unwrap();
+                sheet1
+                    .write_string((index + 1) as u32, 8, &ret.get("effect"), Some(&format2))
+                    .unwrap();
+            }
+        }
+    }
+}
+
+pub async fn write_cve_output_async(cve_map: &HashMap<String, String>, out: &mut Workbook, detail: bool) {
+    if !cve_map.is_empty() {
+        let format1 = set_title_format();
+        let format2 = set_content_format();
+
+
+        let mut cve_keys: Vec<String> = cve_map.keys().map(|x| x.to_string()).collect();
+        cve_keys.sort();
+
+        let sheet_name = format!("cve-{}", 0);
+        let mut sheet1: Worksheet = add_worksheet(out, sheet_name, &format1);
+        for (mut index, k) in cve_keys.iter().enumerate() {
+            if index % 60000 == 0 && index != 0 {
+                let sheet_name = format!("cve-{}", index / 60000);
+                sheet1 = add_worksheet(out, sheet_name, &format1);
+            }
+            index = index % 60000;
+            if let Some(v) = cve_map.get(k) {
+                sheet1
+                    .write_string((index + 1) as u32, 0, k, Some(&format2))
+                    .unwrap();
+                println!("{}:{}", k, v);
+                sheet1
+                    .write_url((index + 1) as u32, 1, v, Some(&format2))
+                    .unwrap();
+                if !detail {
+                    // need parser CVE detail info
+                    continue;
+                }
+                let ret = ALIYUN_CVE_API.lock().unwrap().query(k).await.unwrap();
                 // println!("{:#?}", ret.to_json());
                 sheet1
                     .write_string((index + 1) as u32, 2, &ret.get("title"), Some(&format2))

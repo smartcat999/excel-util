@@ -1,8 +1,9 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard},
 };
-pub trait CveApi: Send + Sync {
+use std::future::Future;
+
+pub trait CveApi: Sync + Send {
     fn query(&self, cve_id: &str) -> Box<dyn Cve>;
     fn id(&self) -> String;
 }
@@ -13,27 +14,27 @@ pub trait Cve {
 }
 
 pub struct CveApis {
-    apis: Arc<Mutex<HashMap<String, Box<dyn CveApi>>>>,
+    apis: HashMap<String, Box<dyn CveApi>>
 }
 
 impl CveApis {
     pub fn new() -> CveApis {
         let apis: HashMap<String, Box<dyn CveApi>> = HashMap::new();
         CveApis {
-            apis: Arc::new(Mutex::new(apis)),
+            apis,
         }
     }
 
     pub fn register(&mut self, cve_api: Box<dyn CveApi>) {
         let key = cve_api.id();
 
-        Ok((&mut self.apis.lock().unwrap(), key, cve_api))
+        Ok((&mut self.apis, key, cve_api))
             .and_then(|(x, y, z)| CveApis::insert(x, y, z))
             .unwrap();
     }
 
     fn insert(
-        x: &mut MutexGuard<HashMap<String, Box<dyn CveApi>>>,
+        x: &mut HashMap<String, Box<dyn CveApi>>,
         key: String,
         cve_api: Box<dyn CveApi>,
     ) -> Result<(), ()> {
@@ -45,7 +46,7 @@ impl CveApis {
     }
 
     pub fn invoke(&self, key: &str, id: &str) -> Box<dyn Cve> {
-        self.apis.lock().unwrap().get(key).unwrap().query(id)
+        self.apis.get(key).unwrap().query(id)
     }
 }
 

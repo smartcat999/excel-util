@@ -1,28 +1,31 @@
-use std::{collections::HashMap, fs, path::Path, sync::Mutex, vec};
+use std::{sync::Mutex, vec};
+use std::sync::Arc;
 
-use clap::{value_parser, App, Arg, ArgAction, ArgMatches, Command};
-use calamine::{open_workbook, DataType, Xlsx, Reader};
-use xlsxwriter::{format::*, Workbook};
+use clap::{value_parser, App, Arg, ArgAction, Command};
 
 pub mod api;
-pub mod lib;
 pub mod utils;
 pub mod exporter;
 pub mod analyze;
 
-use lib::CveApis;
+use api::lib::CveApis;
+use crate::command::cve::api::aliyun_api::AsyncAliyunApi;
 
-use crate::command::lib::image;
-
-use super::lib::image::ImageIndex;
+// use crate::command::lib::image;
+//
+// use super::lib::image::ImageIndex;
 
 const TITLE_FONT_SIZE: f64 = 16.0;
 
 lazy_static! {
-    pub static ref CVE_API: Mutex<CveApis> = {
-        let mut cve_apis = lib::CveApis::new();
+    pub static ref CVE_API: Arc<Mutex<CveApis>> = {
+        let mut cve_apis = CveApis::new();
         cve_apis.register(Box::new(api::aliyun_api::AliyunApi::new()));
-        Mutex::new(cve_apis)
+        Arc::new(Mutex::new(cve_apis))
+    };
+    pub static ref ALIYUN_CVE_API: Arc<Mutex<AsyncAliyunApi>> = {
+        let aliyun_api = AsyncAliyunApi::new();
+        Arc::new(Mutex::new(aliyun_api))
     };
 }
 

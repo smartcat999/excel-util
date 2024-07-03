@@ -3,9 +3,8 @@ use std::fs;
 use std::path::Path;
 use calamine::{DataType, open_workbook, Reader, Xlsx};
 use clap::ArgMatches;
-use xlsxwriter::{Format, Workbook};
-use xlsxwriter::format::{FormatAlignment, FormatColor, FormatVerticalAlignment};
-use crate::command::cve::{TITLE_FONT_SIZE, utils};
+use xlsxwriter::{Workbook};
+use crate::command::cve::{utils};
 use crate::command::lib::image;
 use crate::command::lib::image::ImageIndex;
 
@@ -158,7 +157,7 @@ fn write_object_output(
             let mut image_merge_end = image_merge_start - 1;
             let mut image_cve: usize = 0;
             if let Some(v) = object_map.get(k) {
-                for (comp_id, comps) in v.iter() {
+                for (_comp_id, comps) in v.iter() {
                     let comp_merge_start = global_index as u32;
                     let mut comp_merge_end = comp_merge_start - 1;
                     let mut comp_cve_num = 0;

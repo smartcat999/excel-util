@@ -1,12 +1,14 @@
-use std::fmt::format;
-use crate::command::cve::api::base::HttpClient;
-use crate::command::cve::lib::{Cve, CveApi};
+use crate::command::cve::api::base::{AsyncHttpClient, HttpClient};
+use crate::command::cve::api::lib::{Cve, CveApi};
 use select::document::Document;
 use select::node::Node;
 use select::predicate::{Class, Name, Predicate};
 use serde::{self, Deserialize, Serialize};
 use std::fs;
+use std::future::Future;
 use std::io::Write;
+use std::pin::Pin;
+use std::sync::Arc;
 
 pub const ALI_YUN_CVE_API: &str = "AliyunApi";
 
@@ -101,6 +103,86 @@ impl CveApi for AliyunApi {
     }
 }
 
+
+pub struct AsyncAliyunApi {
+    http_client: AsyncHttpClient,
+}
+
+impl AsyncAliyunApi {
+    pub fn new() -> AsyncAliyunApi {
+        AsyncAliyunApi {
+           http_client : AsyncHttpClient::new(),
+        }
+    }
+
+    fn trim_node(&self, s: String) -> String {
+        s.trim().trim_matches('\n').to_string()
+    }
+
+    fn parser_html(&self, target: &str) -> AliyunCve {
+        let document = Document::from(target);
+        let mut cve = AliyunCve::new();
+        for node in document.find(Class("header__title__text")).take(1) {
+            cve.title = self.trim_node(node.text());
+        }
+        for node in document.find(Class("metric-value")).take(1) {
+            cve.id = self.trim_node(node.text());
+        }
+
+        for node in document.find(Class("metric-value")).take(3) {
+            cve.fix_label = self.trim_node(node.text());
+        }
+        for node in document.find(Class("metric-value")).take(4) {
+            cve.publish = self.trim_node(node.text());
+        }
+        for node in document
+            .find(Class("text-detail").child(Name("div")))
+            .collect::<Vec<Node>>()
+        {
+            cve.description += &format!("{}\n", self.trim_node(node.text()));
+        }
+        for node in document.find(Class("text-detail").and(Name("div"))).take(2) {
+            cve.suggestion = self.trim_node(node.text());
+        }
+        for node in document
+            .find(Class("cvss-breakdown").descendant(Class("cvss-breakdown__score")))
+            .take(2)
+        {
+            cve.score = self.trim_node(node.text());
+        }
+        for node in document.find(Class("cvss-breakdown__desc")).take(1) {
+            cve.effect = self.trim_node(node.text());
+        }
+        // println!("{:#?}", cve);
+        cve
+    }
+
+    #[allow(unused)]
+    fn write_file(&self, path: &str, response: reqwest::blocking::Response) {
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+            .unwrap();
+        file.write_all(&response.bytes().unwrap()).unwrap();
+    }
+
+    pub async fn query(&self, id: &str) -> Result<Box<dyn Cve>, Box<dyn std::error::Error>> {
+        let mut cve = AliyunCve::new();
+        let resp = self
+            .http_client
+            .get(&(String::from("https://avd.aliyun.com/detail?id=") + id)).await?;
+        cve = self.parser_html(resp.text().await?.as_str());
+        Ok(Box::new(cve))
+    }
+}
+
+impl Default for AsyncAliyunApi {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct AliyunCve {
     id: String,
@@ -152,6 +234,7 @@ impl Cve for AliyunCve {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use tokio_test;
 
     #[test]
     fn test_cve_api() {
@@ -163,5 +246,22 @@ mod tests {
     fn test_cve_parser() {
         let _cve_api = AliyunApi::new();
         //cve_api.parser_html(include_str!("cve.html"));
+    }
+
+    #[test]
+    fn test_cve_async_api() {
+        let cve_api = AliyunApi::new();
+        tokio_test::block_on(async {
+            let cve = cve_api.async_query("CVE-2023-25194").await;
+            match cve {
+                Ok(v) => {
+                    println!("{}", v.to_json());
+                },
+                Err(e) => {
+                    println!("{}", e)
+                }
+            }
+
+        });
     }
 }
