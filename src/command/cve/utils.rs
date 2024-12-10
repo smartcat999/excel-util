@@ -90,7 +90,7 @@ pub fn write_cve_output(cve_map: &HashMap<String, String>, out: &mut Workbook, d
                     continue;
                 }
                 let ret = CVE_API.lock().unwrap().invoke(api::aliyun_api::ALI_YUN_CVE_API, k);
-                // println!("{:#?}", ret.to_json());
+                println!("{:#?}", ret.to_json());
                 sheet1
                     .write_string((index + 1) as u32, 2, &ret.get("title"), Some(&format2))
                     .unwrap();

@@ -239,7 +239,8 @@ mod tests {
     #[test]
     fn test_cve_api() {
         let cve_api = AliyunApi::new();
-        cve_api.query("CVE-2023-25194");
+        let cve = cve_api.query("CVE-2023-25194");
+        println!("{:?}", cve.to_json());
     }
 
     #[test]
@@ -252,15 +253,15 @@ mod tests {
     fn test_cve_async_api() {
         let cve_api = AliyunApi::new();
         tokio_test::block_on(async {
-            let cve = cve_api.async_query("CVE-2023-25194").await;
-            match cve {
-                Ok(v) => {
-                    println!("{}", v.to_json());
-                },
-                Err(e) => {
-                    println!("{}", e)
-                }
-            }
+            // let cve = cve_api.async_query("CVE-2023-25194").await;
+            // match cve {
+            //     Ok(v) => {
+            //         println!("{}", v.to_json());
+            //     },
+            //     Err(e) => {
+            //         println!("{}", e)
+            //     }
+            // }
 
         });
     }

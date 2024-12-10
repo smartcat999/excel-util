@@ -428,12 +428,17 @@ fn parse_object(
             };
 
             let mut object_bytes: Vec<&str>;
+            let mut object_key_owned: String = String::new();
             let mut object_key: &str = "";
             if object_val.contains('#') {
-                object_bytes = object_val.split('#').collect();
-                if let Some(object) = object_bytes.pop() {
-                    object_key = object.trim_end_matches(".tar_");
-                }
+                // object_bytes = object_val.split('#').collect();
+                object_key = object_val.trim_end_matches(".tar_");
+                let delimiter_count: Vec<&str> = object_val.matches("#").collect();
+                if !delimiter_count.is_empty() {
+                    object_key_owned = object_key.replacen("#", "/",  delimiter_count.len() - 1);
+                    object_key_owned = object_key_owned.replacen("#", ":", 1);
+                    object_key = &object_key_owned;
+                };
             } else if object_val.starts_with("sha256:") {
                 object_key = object_val.as_str();
             } else {
@@ -603,7 +608,24 @@ fn parse_component_cves(
                 continue;
             }
             let component = format!("{}{}", component, version);
-            let cve_inner = Cve::new(cve.to_string(), object.to_string());
+            let mut object_owned = String::new();
+            let mut object_key = String::new();
+            let mut object_array: Vec<&str> = object.split("/").collect();
+            if !object_array.is_empty() {
+                let object_str = object_array[0];
+                let delimiter_count: Vec<&str> = object_str.matches("#").collect();
+                if !delimiter_count.is_empty() {
+                    object_owned = object_str.replacen("#", "/",  delimiter_count.len() - 1);
+                    object_owned = object_owned.replacen("#", ":", 1);
+                    object_key = object_owned;
+                    object_array[0] = &object_key;
+                    object_key = object_array.join("/")
+                };
+            }
+            if object_key.is_empty() {
+                object_key = object.to_string();
+            }
+            let cve_inner = Cve::new(cve.to_string(), object_key);
             if let Some(cves) = component_map.get_mut(&component) {
                 if !cves.contains(&cve_inner) {
                     cves.push(cve_inner.clone());
